@@ -1,0 +1,595 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import mpl_toolkits.basemap as bm
+from matplotlib.colors import LinearSegmentedColormap
+import numpy as np
+import pylab as pl
+import optparse
+import string
+import re
+
+#===============================================================================
+def pointsOnMap(lon,lat,plotSpec='.b',projection='mercator',pretty=False,
+                                                                    show=False):
+   import mpl_toolkits.basemap as bm
+   import pylab as pl
+   
+   #---- create a figure
+   width = 10
+   height = 7.7
+   figObj = pl.gcf()
+   figObj.set_size_inches(width,height)
+   
+   ##--- create an axis
+   left,bottom,width,height = .07,.08,.9,.85
+   rectVal = [left,bottom,width,height]
+   axisbgVal = [.6,.6,.6] #'w' 
+   frameonVal = 'False'
+   axObj = pl.axes(rectVal,axisbg=axisbgVal,frameon=frameonVal)
+
+   #--- remove the ticks from the axis
+   axObj.set_xticks([])
+   axObj.set_yticks([])
+
+   #--- create the map object
+   projections = ['mercator', 'miller', 'mollweide', 'robinson',
+                  'sinusoidal', 'mcbryde','cylindrical',
+                  'pacificGlobe','atlanticGlobe', 'indianGlobe',
+                  'azimuthal','npAzimuthal','spAzimuthal']
+   
+   #--- make sure the projection is recognized
+   if not projection in projections:
+      print '\n\nError: Projection "%s" is not recognized.\n' % (projection)
+      print 'Valid Projections are:'
+      for pr in projections:
+         print "   %s" % (pr)
+      print '\n\n'
+      sys.exit()
+
+   #--- define appropriate map object
+   drawMeridian = True
+   drawParallels = True
+   lat0,lon0 = 0,70
+   npBoundingLat = 60
+   spBoundingLat = -60
+   if projection == 'mercator':
+      minLon,maxLon = 0,360
+      minLat,maxLat = -75,75
+      map = bm.Basemap(projection='merc',
+                       resolution='c',area_thresh=50000,
+                       llcrnrlon=minLon,llcrnrlat=minLat,
+                       urcrnrlon=maxLon,urcrnrlat=maxLat,
+                       suppress_ticks=False)
+   if projection == 'miller':
+      map = bm.Basemap(projection='mill',lon_0=180,resolution='c')
+   if projection == 'mollweide':
+      map = bm.Basemap(projection='moll',lon_0=180,resolution='c')
+   if projection == 'robinson':
+      map = bm.Basemap(projection='robin',lon_0=180,resolution='c')
+   if projection == 'sinusoidal':
+      map = bm.Basemap(projection='sinu',lon_0=180,resolution='c')
+   if projection == 'mcbryde':
+      map = bm.Basemap(projection='mbtfpq',lon_0=180,resolution='c')
+   if projection == 'cylindrical':
+      map = bm.Basemap(projection='cyl',lon_0=180,resolution='c')
+   if projection == 'pacificGlobe':
+      drawMeridian = False
+      lat0,lon0 = 0,210
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'atlanticGlobe':
+      drawMeridian = False
+      lat0,lon0 = 0,330
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'indianGlobe':
+      drawMeridian = False
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'azimuthal':
+      drawMeridian = False
+      drawParallels = False
+      map = bm.Basemap(projection='aeqd',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'npAzimuthal':
+      drawMeridian = False
+      drawParallels = False
+      map = bm.Basemap(projection='npaeqd',lat_0=lat0,lon_0=lon0,resolution='c',
+                       boundinglat=npBoundingLat)
+   if projection == 'spAzimuthal':
+      drawMeridian = False
+      drawParallels = False
+      map = bm.Basemap(projection='spaeqd',lat_0=lat0,lon_0=lon0,resolution='c',
+                       boundinglat=spBoundingLat)
+
+   #--- set the land/water colors for the map
+   if pretty:
+      landColor = 'coral'
+      waterColor = 'aqua'
+   else:
+      landColor = [.4,.4,.4]
+      waterColor = None
+
+   #--- draw the map components to the axis
+   map.drawcoastlines(ax=axObj,zorder=-98)
+   map.drawcountries(ax=axObj,zorder=-99)
+   map.fillcontinents(ax=axObj,color=landColor,lake_color=waterColor,
+                                                                    zorder=-100)
+   map.drawmapboundary(ax=axObj,fill_color=waterColor,zorder=-101)
+   lonBreak = 0
+   
+   #--- choose not to draw meridian and parallels for certain projections
+   if drawMeridian:
+      map.drawmeridians(pl.arange(lonBreak,lonBreak+360,45), ax=axObj,
+               labels=[1,0,0,1], labelstyle='+/-',size='small',weight='semibold')
+   if drawParallels:
+      map.drawparallels(pl.arange(-80,80,20),ax=axObj,labels=[1,0,0,1], 
+                              labelstyle='+/-',size='x-small',weight='semibold')
+
+   #--- transform lat/lon to the correct x/y for plotting on the map projection
+   x,y = map(lon,lat)
+
+   #--- draw the points on the map
+   h = map.plot(x,y,plotSpec)
+
+   #--- show the map
+   if show:
+      callShow()
+
+
+#===============================================================================
+def scatterOnMap(lon,lat,value,boxSize=10,colorBarLimits=[None,None],
+                 colorbarLabel = 'value', projection='mercator',colorMap="normal",show=False,
+                 minLon=0,maxLon=360,minLat=-67,maxLat=67,nLat=44,nLon=120, hideLand=False):
+
+
+
+   #---- create a figure
+   #width = 10
+   #height = 7.7
+   figObj = pl.gcf()
+   #figObj.set_size_inches(width,height)
+   
+   ##--- create an axis
+   left,bottom,width,height = .07,.08,.9,.85
+   rectVal = [left,bottom,width,height]
+   axisbgVal = [.6,.6,.6] #'w' 
+   frameonVal = 'False'
+   axObj = pl.axes(axisbg=axisbgVal,frameon=frameonVal)
+
+   ##--- create an axis
+   #left,bottom,width,height = .01,.01,.98,.98
+   #rectVal = [left,bottom,width,height]
+   #axisbgVal = [.6,.6,.6] #'w' 
+   #frameonVal = 'False'
+   #axObj = pl.axes(axisbg=axisbgVal,frameon=frameonVal)
+
+
+   #--- remove the ticks from the axis
+   axObj.set_xticks([])
+   axObj.set_yticks([])
+
+   #--- create the map object
+   projections = ['mercator', 'ortho','miller', 'mollweide', 'robinson',
+                  'sinusoidal', 'mcbryde','cylindrical',
+                  'pacificGlobe','atlanticGlobe', 'indianGlobe',
+                  'azimuthal','npAzimuthal','spAzimuthal']
+   
+   #--- make sure the projection is recognized
+   if not projection in projections:
+      print '\n\nError: Projection "%s" is not recognized.\n' % (projection)
+      print 'Valid Projections are:'
+      for pr in projections:
+         print "   %s" % (pr)
+      print '\n\n'
+      sys.exit()
+
+   #--- define appropriate map object
+   drawMeridian = True
+   drawParallels = True
+   lat0,lon0 = 0,70
+   npBoundingLat = -30
+   spBoundingLat = 30
+   if projection == 'mercator':
+      #minLon,maxLon = 0,360
+      #minLat,maxLat = -67,67
+      map = bm.Basemap(projection='merc',resolution='c',area_thresh=50000,
+              llcrnrlon=minLon,llcrnrlat=minLat,
+              urcrnrlon=maxLon,urcrnrlat=maxLat,
+              suppress_ticks=False)
+   
+   #--- see the following for a gallery of projections   
+   #http://matplotlib.sourceforge.net/basemap/doc/html/users/mapsetup.html      
+   if projection == 'ortho':
+      map = bm.Basemap(projection='ortho',lat_0=40,lon_0=180,resolution='c')
+   if projection == 'miller':
+      map = bm.Basemap(projection='mill',lon_0=180,resolution='c')
+   if projection == 'mollweide':
+      map = bm.Basemap(projection='moll',lon_0=180,resolution='c')
+   if projection == 'robinson':
+      map = bm.Basemap(projection='robin',lon_0=180,resolution='c')
+   if projection == 'sinusoidal':
+      map = bm.Basemap(projection='sinu',lon_0=180,resolution='c')
+   if projection == 'mcbryde':
+      map = bm.Basemap(projection='mbtfpq',lon_0=180,resolution='c')
+   if projection == 'cylindrical':
+      map = bm.Basemap(projection='cyl',lon_0=180,resolution='c')
+   if projection == 'pacificGlobe':
+      drawMeridian = False
+      lat0,lon0 = 0,210
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'atlanticGlobe':
+      drawMeridian = False
+      lat0,lon0 = 0,330
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'indianGlobe':
+      drawMeridian = False
+      map = bm.Basemap(projection='ortho',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'azimuthal':
+      drawMeridian = False
+      drawParallels = False
+      map = bm.Basemap(projection='aeqd',lat_0=lat0,lon_0=lon0,resolution='c')
+   if projection == 'npAzimuthal':
+      drawMeridian = True
+      drawParallels = True
+      map = bm.Basemap(projection='npaeqd',lat_0=lat0,lon_0=lon0,resolution='c',
+                       boundinglat=npBoundingLat)
+   if projection == 'spAzimuthal':
+      drawMeridian = False
+      drawParallels = False
+      map = bm.Basemap(projection='spaeqd',lat_0=lat0,lon_0=lon0,resolution='c',
+                       boundinglat=spBoundingLat)
+
+
+   #--- draw the map components to the axis
+   map.drawcoastlines(ax=axObj,zorder=1000)
+   map.drawcountries(ax=axObj,zorder=-99)
+   map.fillcontinents(ax=axObj,color=[.4,.4,.4],zorder=-100)
+   map.drawmapboundary(ax=axObj,zorder=-101)
+   lonBreak = 0
+   
+   #--- choose not to draw meridian and parallels for certain projections
+   fontSize = 12
+   if drawMeridian:
+     map.drawmeridians(pl.arange(lonBreak,lonBreak+360,45), ax=axObj,
+            labels=[1,0,0,1], labelstyle='+/-',size=fontSize,weight='normal')
+   if drawParallels:
+      map.drawparallels(pl.arange(-80,80,20),ax=axObj,labels=[1,0,0,1], 
+                              labelstyle='+/-',size=fontSize,weight='normal')
+   
+   #--- make a custom palettes by reversing existing ones
+   colorDictList = [pl.cm.RdBu._segmentdata,pl.cm.gist_rainbow._segmentdata]
+   paletteList = []
+   for colorDict in colorDictList:
+      for color in ['red','green','blue']:
+         _xList = [t[0] for t in colorDict[color]]
+         _y0List = [t[1] for t in colorDict[color]]
+         _y1List = [t[2] for t in colorDict[color]]
+         _y0List.reverse()
+         _y1List.reverse()
+         newTup = tuple(zip(_xList,_y0List,_y1List))
+         colorDict[color] = newTup
+      palette = LinearSegmentedColormap('hilow',colorDict,256)
+      paletteList.append(palette)
+   hilow_palette,hires2palette = tuple(paletteList)
+
+   #--- set the color palette to use for the scatter plot
+   allowedMaps = {'normal': pl.cm.jet,
+                  'cyclic': pl.cm.hsv,
+                  'hires': pl.cm.spectral,
+                  'hires2': hires2palette,
+                  'hilow': hilow_palette,
+                  }
+   if not colorMap in allowedMaps.keys():
+      msg = 'colorMap argument must be in %s' % repr(allowedMaps.keys())
+      raise StandardError, msg
+   palette = allowedMaps[colorMap]
+   palette.set_over(color='w',alpha=1.)
+   palette.set_under(color='k',alpha=1.)
+
+
+   #--- plot colored points
+   if boxSize > 0:
+      
+      #--- convert lat/lon to projection coords
+      x,y = map(lon,lat)
+      
+      #--- draw the points on the map
+      h = map.scatter(x,y,ax=axObj,c=value,s=boxSize,marker='s',
+                                       cmap=palette,linewidth=0,alpha=1)
+      
+   #--- plot interpolated surface
+   else:
+      zOrder = -200
+      if hideLand:
+         zOrder = 100
+      
+      #--- create a grid of lat/lon values      
+      latList = np.linspace(minLat,maxLat,nLat+1)
+      lonList = np.linspace(minLon,maxLon,nLon+1)
+      LON,LAT = np.meshgrid(lonList,latList)
+      
+      #--- interpolate the data to the grid
+      Z = pl.griddata(lon,lat,value,LON,LAT)
+      #--- transform to projection coordinates
+      X,Y = map(LON,LAT)
+      #--- draw the map
+      h = map.pcolor(X,Y,Z,zorder=zOrder)
+      #--- set colormap
+      h.set_cmap(palette)
+      
+      #--- adjust the axis size to look good for --page slideFull
+      left,bottom,width,height = .07,.01,.9,.98
+      axObj.set_position([left,bottom,width,height])      
+
+
+   #--- set the colorbar limits if specified
+   if not colorBarLimits[0] == None:
+      h.set_clim(colorBarLimits)
+      
+   #--- draw the colorbar
+   cb = pl.colorbar(h,ax=axObj,orientation='horizontal',aspect=70, pad=.07)
+   cb.set_label(colorbarLabel)
+
+   #--- show the map
+   if show:
+      callShow()
+
+#===============================================================================
+if __name__ == "__main__":
+   
+   #--- set up to handle command line arguments
+   description="Plot points on a map from stdin"
+   usage = "%prog [optional args]"
+   p = optparse.OptionParser(usage,description=description)
+   p.add_option('-c','--colorBarLimits',action='store',type='string',
+         dest='clim', metavar="cmin:cmax",default="")
+   p.add_option('-x','--boxSize',action='store',type='int',
+         dest='boxSize', metavar="BOXSIZE (default 10)",default=10, help="Color plots only")
+   p.add_option('-p','--plotSpec',action='store',type='string',dest='plotSpec',
+         default='b.',help='Matlab-style specifier for points to plot. (Point plots only)')
+   p.add_option('-l','--clabel',action='store',type='string',
+                   dest='clabel',help='optional value for colorbar', default='')
+   p.add_option('--projection',action='store',type='string',dest='proj',
+                                          help='projection to use for map ' + \
+                          '(enter any string to see list of valid projections)')
+   p.add_option('--overLand',action='store_true',dest='overLand',
+                                    help='Show surface plot over land as well')
+   
+   p.add_option('-m','--commentToken',action='store',type='string',
+         dest='commentToken', metavar="#",default='#')
+   
+   p.add_option('--latLimits',action='store',type='string',
+         dest='latLimits', metavar="-67:67",default='-67:67')
+   
+   p.add_option('--lonLimits',action='store',type='string',
+                            dest='lonLimits', metavar="0:360",default='0:360')
+
+   p.add_option('--nBins',action='store',type='string',
+                            dest='nBins', metavar="90:180",default='90:180',
+                            help="'nLatBins:nLonBins' for interpolated plots")
+   p.add_option('-C','--colorMap',action='store',type='string',
+         dest='colorMap', metavar="colorMapName",default='hires',
+         help='Enter any string to see list of valid colorMaps')
+
+   p.add_option('-b','--beautify',action='store_true',dest='beautify',
+                                                help='Draw nicely colored maps')
+   p.add_option('--title',action='store',type='string',
+         dest='title', metavar="'title text'",default='')
+   
+   p.add_option('-s','--save',action='store',type='string',
+                                               dest='fileName', metavar="fileName")
+   p.add_option('--dpi',action='store', dest='dpi',type='int',default=300,
+                                                metavar="300",help = "savefig dpi")
+   
+   p.add_option('-q','--quiet',action='store_true', default=False,
+         dest='quiet', help='Quiet. (For saing without drawing plot)')
+   
+   
+   p.add_option('--page',action='store',
+                 dest='page',choices=['portrait','landscape','slideFull','slideHalf','slideBumper',
+                                      "slideHalfBumper"],default="slideFull",
+        help = "turn on figure formatting. presets are: portrait|landscape|slideFull|slideHalf|slideBumper"+
+               "|slideHalfBumper")
+   p.add_option('--figSize',action='store',type='string',
+          dest='figSize', metavar="'8.5:11'",
+                  help="Customize --page specification with explicit width:height")
+   p.add_option('--marginTop',action='store', dest='marginTop',type=float,
+                     default=.08,  metavar="0.08",help = "top margin (fig fraction)")
+   p.add_option('--marginBottom',action='store', dest='marginBottom',type=float,
+                    default=.1,metavar="0.1",help = "bottom margin (fig fraction)")
+   p.add_option('--marginLeft',action='store', dest='marginLeft',type=float,
+                    default=.12,metavar="0.12",help = "left margin (fig fraction)")
+   p.add_option('--marginRight',action='store', dest='marginRight',type=float,
+                   default=.08, metavar=".08",help = "right margin (fig fraction)")
+   p.add_option('--sizeTitle',action='store', dest='sizeTitle',type=float,default=18,
+                                             metavar="18",help = "title font size")
+   p.add_option('--sizeLabel',action='store', dest='sizeLabel',type=float,default=16,
+                                             metavar="16",help = "label font size")
+   p.add_option('--sizeNumber',action='store', dest='sizeNumbers',type=float,default=14,
+                                             metavar="14",help = "label font size")
+   p.add_option('--lineWidth',action='store', dest='lineWidth',type=float,default=2,
+                                             metavar="2",help = "label font size")
+   p.add_option('--markerSize',action='store', dest='markerSize',type=float,default=7,
+                                             metavar="7",help = "label font size")
+   
+   
+   options,arguments=p.parse_args()
+   
+   
+   
+   doFormatting = False
+   if not options.page == None:
+      doFormatting = True
+   
+   #--- set any formatting instructions
+   if doFormatting:
+      from matplotlib import rcParams
+      
+      #for p in sorted(rcParams.keys()):
+      #   print p
+      #sys.exit()
+      #
+      rcParams['font.weight'] = 300 # (val = 100 to 900)
+      rcParams['font.size'] = 14 # (val = 100 to 900)
+      
+      
+      rcParams['axes.titlesize'] = options.sizeTitle
+      rcParams['axes.labelsize'] = options.sizeLabel
+      rcParams['axes.linewidth'] = options.lineWidth
+      
+      rcParams['xtick.labelsize'] = options.sizeNumbers
+      rcParams['ytick.labelsize'] = options.sizeNumbers
+      rcParams["xtick.major.size"] = 7
+      rcParams["ytick.major.size"] = 7
+      rcParams['xtick.major.pad'] = 6
+      rcParams['ytick.major.pad'] = 6
+      
+      
+      rcParams['lines.linewidth'] = options.lineWidth #plot lineWidths
+      rcParams['lines.markersize'] = options.markerSize #plot marker sizes
+      
+      if options.page == "portrait":
+         rcParams["figure.figsize"] = [8.5,11] #portrait
+      elif options.page == "slideFull":
+         rcParams["figure.figsize"] = [8.8,5.9] #single power point graph
+   #      if options.marginLeft == .12:
+   #         options.marginLeft = .1
+   #      if options.marginRight == .08:
+   #         options.marginRight = .03
+   #      if options.marginTop == .08:
+   #         options.marginTop = .07
+      elif options.page == "slideHalf":
+         rcParams["figure.figsize"] = [4.8,5.7] #one of two side-by-side power point graphs
+   #      if options.marginLeft == .12:
+   #         options.marginLeft = .14
+   #      if options.marginRight == .08:
+   #         options.marginRight = .04
+   #      if options.marginTop == .08:
+   #         options.marginTop = .06
+      elif options.page == "slideBumper":
+         rcParams["figure.figsize"] = [8.8,4.9] #single power point graph
+   #      if options.marginLeft == .12:
+   #         options.marginLeft = .1
+   #      if options.marginRight == .08:
+   #         options.marginRight = .03
+   #      if options.marginTop == .08:
+   #         options.marginTop = .08
+   #      if options.marginBottom == .1:
+   #         options.marginBottom = .12
+      elif options.page == "slideHalfBumper":
+         rcParams["figure.figsize"] = [4.8,4.9] #one of two side-by-side power point graphs
+   #      if options.marginLeft == .12:
+   #         options.marginLeft = .2
+   #      if options.marginRight == .08:
+   #         options.marginRight = .04
+   #      if options.marginTop == .08:
+   #         options.marginTop = .15
+      else:
+         rcParams["figure.figsize"] = [11,8.5] #default to landscape
+      
+      if not options.figSize == None:
+         m = re.match('^(\S+):(\S+)$',options.figSize)
+         if m:
+            width,height = float(m.group(1)),float(m.group(2))
+            rcParams["figure.figsize"] = [width,height]
+         
+      
+      if not options.marginTop == None:
+         rcParams["figure.subplot.top"] = 1 - options.marginTop
+      if not options.marginBottom == None:
+         rcParams["figure.subplot.bottom"] = options.marginBottom
+      if not options.marginLeft == None:
+         rcParams["figure.subplot.left"] = options.marginLeft
+      if not options.marginRight == None:
+         rcParams["figure.subplot.right"] = 1 - options.marginRight
+         
+      
+      
+      rcParams["figure.dpi"] = 80
+      rcParams["savefig.dpi"] = 80
+   
+   #--- set the color limits
+   cmin = None
+   cmax = None
+   m = re.match('^(\S+):(\S+)$',options.clim)
+   if m:
+      cmin, cmax = float(m.group(1)), float(m.group(2))
+
+   #--- set the colorBarLabel
+   colorbarLabel = options.clabel
+   
+   
+   #--- get the lat limits
+   try:
+      latMin,latMax = tuple([float(w) for w in options.latLimits.split(':')])
+   except:
+      msg = "\n\nCan't interpret latLimits\n\n"
+      raise StandardError,msg
+   
+   #--- get the lon limits
+   try:
+      lonMin,lonMax = tuple([float(w) for w in options.lonLimits.split(':')])
+   except:
+      msg = "\n\nCan't interpret lonLimits\n\n"
+      raise StandardError,msg
+   
+
+   #--- get the grid size
+   try:
+      nLat,nLon = tuple([float(w) for w in options.nBins.split(':')])
+   except:
+      msg = "\n\nCan't interpret nBins\n\n"
+      raise StandardError,msg
+
+      
+   #--- specify the projection
+   if options.proj == None:
+      projection = 'mercator'
+   else:
+      projection = options.proj
+
+   #--- read in the data
+   data = np.loadtxt(sys.stdin,comments=options.commentToken)
+   if not len(data.shape) == 2:
+      msg = 'At least two columns must be provided as input'
+      raise StandardError,msg
+   
+   #--- figure out how many columns were provided
+   nCols = data.shape[1]
+   
+   #--- error out not 2 or 3 colums specified
+   if nCols!=2 and nCols!=3:
+      msg = 'Either 2 or 3 columns must be provided as input'
+      raise StandardError,msg
+   
+   #--- get the lat/lon vectors   
+   lat = data[:,0]
+   lon = data[:,1]
+   
+   #--- specify the beautify flag
+   if options.beautify == None:
+      pretty = False
+   else:
+      pretty = True
+
+   
+   #--- handle the case for only plotting points
+   if nCols == 2:
+      pointsOnMap(lon,lat,plotSpec=options.plotSpec,projection=projection,pretty=pretty)
+   #--- handle the case for scatter plotting
+   else:
+      data = data[:,2]
+      hideLand = options.overLand
+      scatterOnMap(lon,lat,data,boxSize=options.boxSize,colorBarLimits=[cmin,cmax],
+                  colorbarLabel=colorbarLabel,colorMap=options.colorMap,projection=projection,
+                  minLat=latMin,maxLat=latMax,minLon=lonMin,maxLon=lonMax,nLat=nLat,nLon=nLon,hideLand=hideLand)
+   
+   pl.title(options.title)
+
+
+   #--- save the file if requested
+   if not options.fileName == None:
+      pl.gcf().savefig(options.fileName,dpi=options.dpi)
+
+      
+   #--- plot if requested
+   if not options.quiet:
+      pl.show()

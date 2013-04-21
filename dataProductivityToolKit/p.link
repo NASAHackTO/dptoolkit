@@ -1,0 +1,188 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import string
+import copy
+
+#--- set up the option parser
+description = "This script links two files in the one-to-many sense based "
+description += "on keys created from specified columns.  O,M are python-like "
+description += "slice strings that specify the key columns for the 'one' and 'many' files. "
+description += "Similarly o,m specify the output columns from the 'one' and 'many' files. "
+
+usage = "%prog -O '0:2|3:5' -M '5:7|10|12' -o 9 -m '10:16' -f oneFile.txt manyFile.txt"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-O','--keyListOne',action='store',type='string',
+                                    dest='keyValListA',metavar='keyListOne',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-M','--keyListMany',action='store',type='string',
+                                    dest='keyValListB',metavar='keyListMany',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-o','--outListOne',action='store',type='string',
+                                    dest='outValListA',metavar='outListOne',
+                                    default=":",
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-m','--outListMany',action='store',type='string',
+                                    dest='outValListB',metavar='outListMany',
+                                    default=":",
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+
+p.add_option('-f','--files',action='store',type='string',
+                                    dest='fileList',metavar='oneFile manyFile',
+                                    nargs=2,
+                                    help="The 'one' and 'many' files. (the order matters)")
+
+options,arguments = p.parse_args()
+
+
+#--- enforce required arguments
+if options.keyValListA == None:
+   p.print_help()
+   print'\n\nError:  Must specify keyValListA\n\n'
+   sys.exit()
+
+if options.keyValListB == None:
+   p.print_help()
+   print'\n\nError:  Must specify keyValListB\n\n'
+   sys.exit()
+
+if options.fileList == None:
+   p.print_help()
+   print'\n\nError:  Must specify files to join\n\n'
+   sys.exit()
+   
+#--- parse the key value and out value inputs
+keySpecListA =  options.keyValListA.split("|")
+keySpecListB =  options.keyValListB.split("|")
+outSpecListA =  options.outValListA.split("|")
+outSpecListB =  options.outValListB.split("|")
+
+#--- initialize a list that will hold two line dictionaries.  One for each file
+fileDictList = []
+
+#--- open the input files
+fileObjList = [open(options.fileList[nn],'r') for nn in range(2)]
+
+#--- initialize the line dictionary for this file
+oneDict,manyDict = {},{}
+
+#--- loop over each file to fill the fileDictList
+for nFile,thisFile,keySpecList,outSpecList in zip([0,1],fileObjList,
+                                            [keySpecListA,keySpecListB],
+                                            [outSpecListA,outSpecListB],
+                                            ):
+   #--- loop over all lines in this file to populate its lineDict
+   for line in thisFile:
+      #--- split the line into words
+      words = line.split()
+      #--- ignore empty lines
+      if words:
+         #--- initialize lists to hold key values and output values
+         keyColList = []
+         outColList = []
+         #--- fill key and output values with supplied specs
+         for keySpec in keySpecList:
+            if ':' in keySpec:
+               exec "keyColList.extend(words[%s])" % keySpec
+            else:
+               exec "keyColList.append(words[%s])" % keySpec
+               
+         for outSpec in outSpecList:
+            if ':' in outSpec:
+               exec "outColList.extend(words[%s])" % outSpec
+            else:
+               exec "outColList.append(words[%s])" % outSpec
+               
+         
+         #--- define a key tuple (try to convert all key numbers to floats)
+         keyTupList = []
+         for key in keyColList:
+            try:
+               keyTupList.append(float(key))
+            except:
+               keyTupList.append(key)
+         keyTuple = tuple(keyTupList)
+         
+         
+         #--- if this is the "one file"
+         if nFile == 0:
+            #--- create an entry in the line dictionary for this line
+            oneDict[keyTuple] = outColList
+         
+         #---if this is the "many file"
+         else:
+            #--- if this key doesn't exist, create it
+            if not manyDict.has_key(keyTuple):
+               manyDict[keyTuple] = []
+            #--- append the columsn from this line to the manyDict for this key
+            manyDict[keyTuple].append(outColList)
+
+#--- make sets out of the keys 
+keySetOne,keySetMany = set(oneDict.keys()),set(manyDict.keys())
+
+#--- make a list of intersecting keys
+intersectKeyList = list(keySetOne.intersection(keySetMany))
+
+#--- print out the linked lines
+try:
+   for keyVal in sorted(intersectKeyList):
+      oneString =  string.join(oneDict[keyVal],"   ")
+      for colList in manyDict[keyVal]:
+         manyString =  string.join(colList,"   ")
+         print oneString+"   "+manyString
+except IOError:
+   sys.exit()
+      
+      
+#
+#
+#
+##--- if joined printing desired
+#if options.diffPrint == None:
+#   #--- make a list of intersecting keys
+#   intersectKeyList = list(keySetA.intersection(keySetB))
+#
+#   #--- print out the joined outputs in key order
+#   for keyVal in sorted(intersectKeyList):
+#      aString =  string.join(fileDictList[0][keyVal],"   ")
+#      bString =  string.join(fileDictList[1][keyVal],"   ")
+#      print aString+"   "+bString
+#
+##--- if diffPrint desired
+#else:
+#   #--- make aOnly and bOnly lists
+#   aOnlyKeyList = list(keySetA - keySetB)
+#   bOnlyKeyList = list(keySetB - keySetA)
+#
+#   #--- print aOnly values
+#   for keyVal in sorted(aOnlyKeyList):
+#      aString =  string.join(fileDictList[0][keyVal],"   ")
+#      print "A   "+aString
+#      
+#   #--- print bOnly values
+#   for keyVal in sorted(bOnlyKeyList):
+#      bString =  string.join(fileDictList[1][keyVal],"   ")
+#      print "B   "+bString
+#         
+#         
+#         
+#         
+#   
+#   
+   
+
+
+
+
+
+
+
+   
+

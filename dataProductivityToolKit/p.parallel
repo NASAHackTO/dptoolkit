@@ -1,0 +1,163 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import subprocess
+import optparse
+import time
+import datetime
+
+#===============================================================================
+#===============================================================================
+class parallel(object):
+   #============================================================================
+   def __init__(self,nProcesses = 4,startPause=0,allPause=0):
+      self.nProcesses = nProcesses
+      self.pList = []
+      self.numStarted = 0
+      self.startPause = startPause
+      self.allPause = allPause
+      if self.allPause > 0:
+         self.startPause = self.allPause
+         
+   #============================================================================
+   def defaultCleaner(self,p):
+      host = os.environ['HOST']
+      msg = "%s::pid=%s: "%(host,repr(p.pid))+datetime.datetime.now().isoformat()+': DONE!'
+      print msg
+      sys.stdout.flush()
+   
+   #============================================================================
+   def addProcess(self,cmd,stdout=None,stdin=None,stderr=None,msg=None,
+                                                          cleanerFunction=None):
+      #--- wait until a new process is allowed to be spawned
+      while self.numLiveProcesses(cleanerFunction) >= self.nProcesses:
+         time.sleep(.1)
+      
+      #--- do startPause if requested
+      if self.numStarted < self.nProcesses:
+         if self.startPause > 0:
+            time.sleep(self.startPause)
+      #--- do allPause if requested
+      elif self.allPause > 0:
+         time.sleep(self.allPause)
+      
+      #--- start the new process
+      p = subprocess.Popen(['bash','-c',cmd],shell=False,stdout=stdout,
+                                                      stdin=stdin,stderr=stderr)
+      self.numStarted += 1
+      #--- prepend process id to message
+      host = os.environ['HOST']
+      msg = "%s::pid=%s: %s" % (host,repr(p.pid),msg)
+      print msg
+
+      self.pList.append(p)
+      
+   #============================================================================
+   def numLiveProcesses(self,cleanerFunction=None):
+      #--- initialize a flag to force entry into a loop
+      finishedProcessFound = True
+      
+      #--- keep looping until all completed processes have been cleaned
+      while finishedProcessFound:
+         finishedProcessFound = False
+         #--- loop over all processes in the list
+         for index,p in enumerate(self.pList):
+            #--- if this process is finished
+            if not p.poll() == None:
+               #--- run cleaner function
+               if cleanerFunction == None:
+                  cleanerFunction = self.defaultCleaner
+               cleanerFunction(p)
+               #--- remove finished process from pList and set flags
+               self.pList.pop(index)
+               finishedProcessFound = True
+      
+      #--- return the number of live processes
+      return len(self.pList)
+               
+   #============================================================================
+   def wait(self):
+      #--- wait until a new process is allowed to be spawned
+      while self.numLiveProcesses(None) > 0:
+         time.sleep(1)
+
+
+
+#===============================================================================
+if __name__ == "__main__":
+   
+   description = "This script will run a series of commands in parallel on a "
+   description += "single host computer.  It reads commands from an input file "
+   description += "and executes them by running up to a specified number of "
+   description += "instances in parallel.  Each of the commands will be "
+   description += "executed in its own bash shell. Note that the input file "
+   description += "can be a named pipe allowing for passing commands on the fly. "
+   description += "Also note that the \"parallel\" class in this program can be used "
+   description += "as a template for more specialized parallel operations. "
+   
+   usage = "%prog -f commandFile -n nProcesses"
+   p = optparse.OptionParser(description=description, usage = usage)
+   
+   p.add_option('-f','--commandFile',action='store',type='string',
+                                       dest='commandFile',metavar='fileName',
+                                       nargs=1,
+                                help="File or named pipe containing commands. "+
+                                           "If not specified, stdin is assumed")
+   
+   p.add_option('-n','--nProcesses',action='store',type='int',
+                                 dest='nProcesses',metavar='4',
+                                 nargs=1, default = 4,
+                                 help="The max number of parallel processes to run")
+
+   p.add_option('-p','--startPause',action='store',type='float',
+                                 dest='startPause',metavar='0.0',
+                                 nargs=1, default = 0.0,
+                              help="Seconds to wait between n initial launches")
+
+   p.add_option('-P','--allPause',action='store',type='float',
+                                 dest='allPause',metavar='0.0',
+                                 nargs=1, default = 0.0,
+                                    help="Seconds to wait between all launches")
+
+   p.add_option('-v','--verbose',action='store_true',dest='verbose', default=False,
+                           help="Print commands to stdout as they are launched")
+
+   p.add_option('-e','--echoOnly',action='store_true',dest='echoOnly', default=False,
+                        help="Do not actually run the commands, just echo them")
+
+   options,arguments = p.parse_args()
+   
+   #if options.commandFile == None:
+   #   sys.stderr.write("\n\nYou must supply a command file\n\n")
+   #   sys.exit(1)
+      
+
+   #--- instantiate a parallel class object
+   pp = parallel(nProcesses=options.nProcesses,startPause=options.startPause,
+                                                      allPause=options.allPause)
+   
+   #--- open the input file and read command lines
+   if options.commandFile == None:
+      inFile = sys.stdin
+   else:
+      inFile = open(options.commandFile)
+   commandLineList = inFile.readlines()
+
+   #--- read each line in the command file
+   for index,cmd in enumerate(commandLineList):
+      #--- if echo only, just print the commands
+      if options.echoOnly:
+         print cmd.strip()
+      #--- otherwise, actually run the command
+      else:
+         msg = datetime.datetime.now().isoformat()+':  '+"%d of %d:" % (index+1,len(commandLineList))
+         if options.verbose:
+            msg = msg + " "+cmd.strip()
+         pp.addProcess(cmd,msg=msg)
+   #--- close the input file
+   inFile.close()
+   
+   #--- wait until all process are done
+   pp.wait()
+      
+

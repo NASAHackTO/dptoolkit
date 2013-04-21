@@ -1,0 +1,80 @@
+#! /usr/bin/env ppython
+#
+#import os
+import sys
+import optparse
+from numpy import array, sqrt
+
+#--- set up the option parser
+description = "This script adds columns from stdin in quadtrature"
+
+usage = "cat file.txt | %prog"
+p = optparse.OptionParser(description=description, usage = usage)
+
+options,arguments = p.parse_args()
+
+for line in sys.stdin:
+   a = array([float(w) for w in line.split()])
+   print sqrt(sum(a*a))
+   
+
+
+
+
+#
+##--- set up the option parser
+#description = "This script adds columns from stdin in quadtrature"
+#
+#usage = "cat file.txt | %prog"
+#p = optparse.OptionParser(description=description, usage = usage)
+#
+#options,arguments = p.parse_args()
+#
+#p.add_option('-c','--colSpec',action='store',type='string',
+#                                    dest='colSpec',metavar='colSpec',
+#                                    default = ':',
+#                                    help="Pipe delimited list of col ranges."+
+#                                           " (Col numbering like python lists)")
+#
+#
+#colList =  options.colSpec.split("|")
+#
+#
+##--- loop over all lines in this file to populate its lineDict
+#for line in thisFile:
+#   #--- split the line into words
+#   words = line.split()
+#   #--- ignore empty lines
+#   if words:
+#      #--- initialize lists to hold key values and output values
+#      colVList = []
+#      outColList = []
+#      #--- fill key and output values with supplied specs
+#      for keySpec in keySpecList:
+#         if ':' in keySpec:
+#            exec "keyColList.extend(words[%s])" % keySpec
+#         else:
+#            exec "keyColList.append(words[%s])" % keySpec
+#            
+#      for outSpec in outSpecList:
+#         if ':' in outSpec:
+#            exec "outColList.extend(words[%s])" % outSpec
+#         else:
+#            exec "outColList.append(words[%s])" % outSpec
+#         
+#      #--- create an entry in the line dictionary for this line
+#      lineDict[tuple(keyColList)] = outColList         
+#      
+#         
+#   
+#   
+#   
+#
+#
+#
+#
+#
+#
+#
+#   
+#

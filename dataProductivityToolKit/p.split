@@ -1,0 +1,41 @@
+#! /usr/bin/env ppython
+
+import sys
+import string
+import optparse
+
+#--- set up to handle command line arguments
+description="Split lines on stdin using the specified delimeter"
+usage = "cat file.txt | %prog -d '::' # splits all input lines around the :: delimeter"
+p = optparse.OptionParser(usage,description=description)
+p.add_option('-d','--delimeter',action='store',type='string',
+                                   dest='delimeter', metavar="' '",default=None,
+                       help="Delimeter on which to split (default white space)")
+
+
+#--- parse the input arguments
+options,arguments=p.parse_args()
+
+if options.delimeter == None:
+   for line in sys.stdin:
+      print string.join(string.split()).strip()
+else:
+   for line in sys.stdin:
+      print string.join(line.split(options.delimeter)).strip()
+
+
+
+
+#
+#if  len(sys.argv) != 2:
+#   msg = 'usage: cat fileName | p.split separator'
+#   print
+#   print msg
+#   print
+#   sys.exit()
+#   
+#
+#separator = sys.argv[1]
+#for line in sys.stdin:
+#   print string.join(line.split(separator),' ').strip()
+  

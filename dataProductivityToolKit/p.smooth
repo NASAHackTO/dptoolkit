@@ -1,0 +1,145 @@
+#! /usr/bin/env ppython
+
+#import numpy as np
+from numpy import r_, convolve,hanning,hamming,bartlett,blackman,ones
+from numpy import loadtxt, savetxt
+import optparse
+import sys
+ 
+def smooth(x,window_len=11,window='hanning'):
+    """smooth the data using a window with requested size.
+    
+    This code was obtained from:
+    http://www.scipy.org/Cookbook/SignalSmooth
+    
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal 
+    (with the window size) in both ends so that transient parts are minimized
+    in the begining and end part of the output signal.
+    
+    input:
+        x: the input signal 
+        window_len: the dimension of the smoothing window; should be an odd integer
+        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+            flat window will produce a moving average smoothing.
+
+    output:
+        the smoothed signal
+        
+    example:
+
+    t=linspace(-2,2,0.1)
+    x=sin(t)+randn(len(t))*0.1
+    y=smooth(x)
+    
+    see also: 
+    
+    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+    scipy.signal.lfilter
+ 
+    TODO: the window parameter could be the window itself if an array instead of a string   
+    """
+
+    if x.ndim != 1:
+        raise ValueError, "smooth only accepts 1 dimension arrays."
+
+    if x.size < window_len:
+        raise ValueError, "Input vector needs to be bigger than window size."
+
+
+    if window_len<3:
+        return x
+
+
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError, "Window must be one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+
+    s = r_[2*x[0]-x[window_len:1:-1],x,2*x[-1]-x[-1:-window_len:-1]]
+    #print(len(s))
+    if window == 'flat': #moving average
+        w=ones(window_len,'d')
+    else:
+        w = eval(window+'(window_len)')
+
+    y=convolve(w/w.sum(),s,mode='same')
+    return y[window_len-1:-window_len+1]
+
+
+
+
+import pylab as pl
+def smooth_demo():
+
+    t=pl.linspace(-4,4,100)
+    x=pl.sin(t)
+    xn=x+pl.randn(len(t))*0.1
+    y=smooth(x)
+
+    ws=31
+
+    pl.subplot(211)
+    pl.plot(ones(ws))
+
+    windows=['flat', 'hanning', 'hamming', 'bartlett', 'blackman']
+
+    pl.hold(True)
+    for w in windows[1:]:
+        eval('pl.plot('+w+'(ws) )')
+
+    pl.axis([0,30,0,1.1])
+
+    pl.legend(windows)
+    pl.title("The smoothing windows")
+    pl.subplot(212)
+    pl.plot(x)
+    pl.plot(xn)
+    for w in windows:
+        pl.plot(smooth(xn,10,w))
+    l=['original signal', 'signal with noise']
+    l.extend(windows)
+
+    pl.legend(l)
+    pl.title("Smoothing a noisy signal")
+    pl.show()
+
+
+if __name__=='__main__':
+    description = "Smooth columns of data"
+    usage = "cat file.txt | %prog [options]"
+    p = optparse.OptionParser(description=description, usage = usage)
+    
+    
+    p.add_option('-c','--colList',action='store',type='string',
+                                    dest='colSpec',metavar='colSpec',default="0",
+                                     help="Colon delimited col list to smooth"+
+                                           " (Col numbering like python lists)")
+
+    p.add_option('-n','--nPoints',action='store',type='int',
+                                         dest='nPoints',metavar='10',default=10,
+                                         help="Number of points to smooth over")
+    p.add_option('-w','--window',action='store',type='string',
+                                    dest='windowType',metavar='flat',default="flat",
+       help = "Window type ('flat', 'hanning', 'hamming', 'bartlett', 'blackman')")
+    
+    options,arguments = p.parse_args()
+
+    colList = [int(c) for c in options.colSpec.split(':')]
+    nPoints = options.nPoints
+    windowType = options.windowType
+    
+    data = loadtxt(sys.stdin)
+    
+    for col in colList:
+        if len(data.shape) > 1:
+            data[:,col] = smooth(data[:,col], nPoints,windowType)
+        else:
+            data = smooth(data, nPoints,windowType)
+            
+        
+    savetxt(sys.stdout, data, fmt='%0.16g', delimiter='  ')
+    
+    
+    
+    
+    
+    #smooth_demo()

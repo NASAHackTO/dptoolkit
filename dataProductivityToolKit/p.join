@@ -1,0 +1,166 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import string
+import copy
+
+#--- set up the option parser
+description = "This script joins two files together based on key values "
+description += "created from combinations of columns.  Shown above is an "
+description += "example of creating keys from col 0,1 and 3,4 of the first "
+description += "file and from col 5,6,10 and 12 of the second file.  The output "
+description += "will be col 9 of the first file and cols 10 through 15 of the "
+description += "second file. Key cols and output cols are specified using "
+description += "identical syntax. "
+
+usage = "%prog -A '0:2|3:5' -B '5:7|10|12' -a 9 -b '10:16' -f file1.txt file2.txt"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-A','--keyListA',action='store',type='string',
+                                    dest='keyValListA',metavar='keyListA',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-B','--keyListB',action='store',type='string',
+                                    dest='keyValListB',metavar='keyListB',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-a','--outListA',action='store',type='string',
+                                    dest='outValListA',metavar='outListA',
+                                    default=":",
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-b','--outListB',action='store',type='string',
+                                    dest='outValListB',metavar='outListB',
+                                    default=":",
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+
+p.add_option('-d','--diffPrint',action='store',type='string',
+                                    dest='diffPrint',metavar='diffPrint',
+                                    nargs=0,
+                                    help="Print lines that couldn't be joined"+
+                                         " (fileA/B denoted by first Col A/B)")
+
+p.add_option('-f','--files',action='store',type='string',
+                                    dest='fileList',metavar='fileList',
+                                    nargs=2,
+                                    help="exactly two file names to join")
+
+options,arguments = p.parse_args()
+
+
+#--- enforce required arguments
+if options.keyValListA == None:
+   p.print_help()
+   print'\n\nError:  Must specify keyValListA\n\n'
+   sys.exit()
+
+if options.keyValListB == None:
+   p.print_help()
+   print'\n\nError:  Must specify keyValListB\n\n'
+   sys.exit()
+
+if options.fileList == None:
+   p.print_help()
+   print'\n\nError:  Must specify files to join\n\n'
+   sys.exit()
+   
+#--- parse the key value and out value inputs
+keySpecListA =  options.keyValListA.split("|")
+keySpecListB =  options.keyValListB.split("|")
+outSpecListA =  options.outValListA.split("|")
+outSpecListB =  options.outValListB.split("|")
+
+#--- initialize a list that will hold two line dictionaries.  One for each file
+fileDictList = []
+
+#--- open the input files
+fileObjList = [open(options.fileList[nn],'r') for nn in range(2)]
+
+
+#--- loop over each file to fill the fileDictList
+for thisFile,keySpecList,outSpecList in zip(fileObjList,
+                                            [keySpecListA,keySpecListB],
+                                            [outSpecListA,outSpecListB],
+                                            ):
+   #--- initialize the line dictionary for this file
+   lineDict = {}
+   #--- loop over all lines in this file to populate its lineDict
+   for line in thisFile:
+      #--- split the line into words
+      words = line.split()
+      #--- ignore empty lines
+      if words:
+         #--- initialize lists to hold key values and output values
+         keyColList = []
+         outColList = []
+         #--- fill key and output values with supplied specs
+         for keySpec in keySpecList:
+            if ':' in keySpec:
+               exec "keyColList.extend(words[%s])" % keySpec
+            else:
+               exec "keyColList.append(words[%s])" % keySpec
+               
+         for outSpec in outSpecList:
+            if ':' in outSpec:
+               exec "outColList.extend(words[%s])" % outSpec
+            else:
+               exec "outColList.append(words[%s])" % outSpec
+            
+         #--- create an entry in the line dictionary for this line
+         lineDict[tuple(keyColList)] = outColList
+   
+   #--- add this line dictionary to the fileDictList      
+   fileDictList.append(copy.deepcopy(lineDict))
+   
+
+#--- make sets out of the keys 
+keySetA,keySetB = set(fileDictList[0].keys()),set(fileDictList[1].keys())
+
+#--- if joined printing desired
+if options.diffPrint == None:
+   #--- make a list of intersecting keys
+   intersectKeyList = list(keySetA.intersection(keySetB))
+
+   #--- print out the joined outputs in key order
+   try:
+      for keyVal in sorted(intersectKeyList):
+         aString =  string.join(fileDictList[0][keyVal],"   ")
+         bString =  string.join(fileDictList[1][keyVal],"   ")
+         print aString+"   "+bString
+   except IOError:
+      sys.exit()
+
+#--- if diffPrint desired
+else:
+   #--- make aOnly and bOnly lists
+   aOnlyKeyList = list(keySetA - keySetB)
+   bOnlyKeyList = list(keySetB - keySetA)
+
+   #--- print aOnly values
+   for keyVal in sorted(aOnlyKeyList):
+      aString =  string.join(fileDictList[0][keyVal],"   ")
+      print "A   "+aString
+      
+   #--- print bOnly values
+   for keyVal in sorted(bOnlyKeyList):
+      bString =  string.join(fileDictList[1][keyVal],"   ")
+      print "B   "+bString
+         
+         
+         
+         
+   
+   
+   
+
+
+
+
+
+
+
+   
+

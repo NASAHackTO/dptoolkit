@@ -1,0 +1,266 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from math import floor
+import datetime
+import string
+
+#===============================================================================
+if __name__ == "__main__":
+   monthDict = {
+               'jan':1,
+               'feb':2,
+               'mar':3,
+               'apr':4,
+               'may':5,
+               'jun':6,
+               'jul':7,
+               'aug':8,
+               'sep':9,
+               'oct':10,
+               'nov':11,
+               'dec':12,
+               }   
+   
+   
+   
+   unitDict = {
+               'second': 1.,
+               'minute': 60.,
+               'hour': 3600.,
+               'day': 24. * 3600.,
+               'week': 7. * 24. * 3600.,
+               'date': 1,
+              }
+   unitList = unitDict.keys()
+   
+   epochDict = {
+               'J2000':datetime.datetime(2000,1,1,12,0,0),
+               'Y2K':datetime.datetime(2000,1,1,0,0,0),
+               }
+   epochList = epochDict.keys()
+   
+   
+   
+   
+   #--- set up the option parser
+   description = "Transform datetime strings into numeric values.  This utility "
+   description += "will transform datetime strings supplied to stdin into "
+   description += "numeric values according to the specified arguments.  The "
+   description += "columns to process are specified with the --colList argument. "
+   description += "Each input column should contain a string that can be "
+   description += "transformed to a date using a format supplied in the --inputFormat "
+   description += "argument.  This argument can contain an arbitrary string, but "
+   description += "is understood to obey Y=yearChar, M = monthChar, etc. "
+   description += "So, for example, a common format found in files could be parsed "
+   description += "with the argument 'YYYY-MM-DD:hh:mm:sssssssss'.  Note that the "
+   description += "s characters (denoting seconds) should specify all characters describing "
+   description += "seconds including any decimal point.  If no epoch argument "
+   description += "is provided, the first time encountered in the file is used.  "
+   description += "The numeric output will be time elapsed since the epoch "
+   description += "expressed in units provided by the -outputUnits argument. "
+   description += "Note: The 'date' output format behaves a bit differently "
+   description += "in that it outputs a standard format datetime string without "
+   description += "making any use of the epoch arguments."
+
+
+
+   usage = "%prog [options args]"
+   p = optparse.OptionParser(description=description, usage = usage)
+   p.add_option('-c','--colList',action='store',type='string',dest='colString',
+         default='0',metavar="'0'", help="Colon delimited list of date columns"+
+                                " to parse.  (Col numbering like python lists)")
+   p.add_option('-i','--inputFormat',action='store',type='string',
+                                        dest='inFormat', metavar="formatString",
+                              help="String describing input format (see above). "+\
+                                   "NOTE: Setting inputFormat='S' means you are "+\
+                                   "supplying a numeric input column containing "+\
+                                   "the number of seconds past the specified epoch. "+\
+                                   "In this case, J2000 is the default epoch if one "+\
+                                   "is not specified")
+   p.add_option('-o','--outputUnits',action='store',type='string',
+                             dest='outUnits', metavar=string.join(unitList,'|'),
+                                  help="Express time from epoch in these units")
+   p.add_option('-e','--epoch',action='store',type='int',nargs=7,
+                                   dest='epoch', metavar="YYYY MM DD hh mm ss us",
+                                help="(defaults to first time encountered)  "+\
+                     "Must specify all values from year to microsecond as ints")
+
+   p.add_option('-E','--epochString',action='store',type='string',
+                                   dest='epochString', metavar="epochName",
+                            help="Use a named epoch instead of that supplied "+\
+                             "in -e argument. valid names = %s"%(repr(epochList)))
+   options,arguments = p.parse_args()
+   
+   
+   
+   #--- make sure required arguments are specified
+   if options.inFormat == None:
+      raise StandardError,"\n\nMust supply a colList argument.\n\n"
+   if not options.outUnits in unitDict.keys():
+      raise StandardError,"\n\outUnits must be one of %s\n\n" % repr(unitDict.keys())
+   
+   #--- get the output units to use
+   outUnit = unitDict[options.outUnits]
+   
+   #--- get the list of columns to process
+   colList = [int(s) for s in options.colString.split(":")]
+   
+   #--- initalize lists to hold character positions for variables
+   yearPosList,monthPosList,dayPosList = [],[],[]
+   hourPosList,minPosList,secPosList = [],[],[]
+   
+   #--- fill the posLists with character positions that will contain their values
+   for pos,ch in enumerate(options.inFormat):
+      if ch == 'Y':
+         yearPosList.append(pos)
+      elif ch == 'M':
+         monthPosList.append(pos)
+      elif ch == 'D':
+         dayPosList.append(pos)
+      elif ch == 'h':
+         hourPosList.append(pos)
+      elif ch == 'm':
+         minPosList.append(pos)
+      elif ch == 's':
+         secPosList.append(pos)
+         
+   #--- set the epoch from the input if it was specified
+   if options.epoch == None:
+      epoch = None
+   else:
+      epoch = datetime.datetime(*options.epoch)
+   
+   #--- set named epoch if it was specified
+   if not options.epochString == None:
+      if options.epochString in epochDict.keys():
+         epoch = epochDict[options.epochString]
+      else:
+         msg = "\n\n epoch name '%s' not recognized. Valid names are %s \n\n" % (
+                                                            options.epochString,
+                                                         repr(epochDict.keys()))
+         raise StandardError, msg
+      
+      
+   #--- see if day of year instead of month/day inputs were given
+   dayOfYearInputs = False
+   if (len(monthPosList) == 0) and (len(dayPosList) == 3):
+      dayOfYearInputs = True
+      
+   #--- see if month names instead of numbers were used
+   monthNameInputs = False
+   if len(monthPosList) == 3:
+      monthNameInputs = True
+
+   #--- determine if the input is supposed to be just a value in seconds
+   inputIsSeconds = False
+   if options.inFormat == 'S':
+      inputIsSeconds = True
+      
+   #--- set the default epoch to J2000 if input is given in seconds
+   if inputIsSeconds and (epoch == None):
+      epoch = epochDict["J2000"]
+      
+      
+      
+   #--- loop over all lines in stdin
+   for line in sys.stdin:
+      #--- start try block for making sure that broken pipes exit nicely
+      try:
+         #--- split the line into words
+         words = line.split()
+         #--- loop over each word (aka column)
+         for col,word in enumerate(words):
+            #--- if this column holds a datetime string
+            if col in colList:
+               if inputIsSeconds:
+                  elapsedSeconds = float(word)
+                  tObj = epoch + datetime.timedelta(seconds=elapsedSeconds)
+               else:
+                  #--- parse datetime components from the datetime string
+                  year = "".join([word[nn] for nn in yearPosList])
+                  month = "".join([word[nn] for nn in monthPosList])
+                  day = "".join([word[nn] for nn in dayPosList])
+                  hour = "".join([word[nn] for nn in hourPosList])
+                  minute = "".join([word[nn] for nn in minPosList])
+                  second = "".join([word[nn] for nn in secPosList])
+                  #--- transform the datetime components to the appropriate/default data types
+                  if year:
+                     wordLen = len(year)
+                     year=int(year)
+                     #--- if two digit year specified, do something reasonable for Y2K
+                     if wordLen < 4:
+                        if year > 50:
+                           year = year + 1900
+                        else:
+                           year = year + 2000
+                  else:
+                     year=2000 # default year is 2000
+                  if month:
+                     if monthNameInputs:
+                        month = monthDict[string.lower(month)]
+                     else:
+                        month=int(month)
+                  else:
+                     month=1 # default month is Jan
+                  if day:
+                     day=int(day)
+                  else:
+                     day=1 # default day is the first
+                  if hour:
+                     hour=int(hour) # default hour is 0
+                  else:
+                     hour=0
+                  if minute:
+                     minute=int(minute)
+                  else:
+                     minute=0 # default minute is 0
+                  if second:
+                     second = float(second)
+                     intSec = int(floor(second))
+                     microSecond = int(round((second - intSec) * 1000000))
+                     second = intSec
+                  else:
+                     second = 0   # default sec and microsec are 0
+                     microSecond = 0
+                     
+                  #--- define a datetime object from the components
+                  if dayOfYearInputs:
+                     tObj = datetime.datetime(year,1,1,0,0,0,0)
+                     dt = datetime.timedelta(days=day-1,hours=hour,minutes=minute,
+                                           seconds=second,microseconds=microSecond)
+                     tObj = tObj + dt
+                  else:
+                     tObj = datetime.datetime(year,month,day,hour,minute,second,microSecond)
+               
+               #--- set the epoch if it doesn't exist
+               if epoch == None:
+                  epoch = tObj
+                  
+               #--- find the time elapsed since the epoch
+               dtObj = (tObj - epoch)
+               
+               #--- express the elapsed time in the appropriate units
+               dt = (86400 * dtObj.days + dtObj.seconds + 1e-6 * dtObj.microseconds) / outUnit
+               
+               #--- write the correct output
+               if options.outUnits == 'date':
+                  sys.stdout.write("%s   " % tObj.strftime("%Y-%m-%d:%H:%M:%S"))
+               else:
+                  sys.stdout.write("%0.15g   " % dt)
+            
+            #--- if you got here, that means that this is not a datetime column, so just echo it
+            else:
+               sys.stdout.write(word+'   ')
+   
+         #--- done processing this line
+         sys.stdout.write('\n')
+         sys.stdout.flush()
+         
+      #--- exit quietly if IOError (because it's probably a broken pipe)
+      except IOError:
+         sys.exit()
+      
+   

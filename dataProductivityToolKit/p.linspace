@@ -1,0 +1,23 @@
+#! /usr/bin/env ppython
+
+import optparse
+import sys
+from numpy import linspace, savetxt
+
+#--- set up the option parser
+description = "Wrap the numpy.linspace function to the linux command line"
+usage = "%prog startVal stopVal numPoints"
+p = optparse.OptionParser(description=description, usage = usage)
+
+
+options,arguments = p.parse_args()
+
+try:
+   startVal,stopVal,numPoints = float(arguments[0]),float(arguments[1]),int(arguments[2])
+except:
+   sys.stderr.write("\n\nError in p.linspace\n\tProblem parsing command line.\n\nSee usgage below.\n--------\n\n")
+   p.print_help()
+   sys.exit(1)
+   
+
+savetxt(sys.stdout,linspace(startVal,stopVal,numPoints),fmt="%0.15g")

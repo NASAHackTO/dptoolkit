@@ -1,0 +1,128 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import subprocess
+import optparse
+from math import ceil
+import time
+
+#===============================================================================
+   
+description = "This script will run a series of commands in parallel across "
+description += "a selection of host computers. The commands are read from stdin. "
+description += "You must specify the maximum " 
+description += "number of jobs to run on each host.  The optimal distribution "
+description += "across hosts is computed by assuming they all run at the same "
+description += "speed.  The commands are then farmed out to each of the hosts "
+description += "and the script waits until all jobs have been completed.  NOTE: "
+description += "You must have ssh setup to be able to log onto each of the hosts "
+description += "without using a password.  See: http://linuxproblem.org/art_9.html. "
+
+usage = "cat commandFile.txt | %prog 'hostName1:nProcesses1' 'hostName2:nProcesses2'"
+usage += "... 'hostNameN:nProcessesN'"
+p = optparse.OptionParser(description=description, usage = usage)
+
+
+#--- these are things I may want to add later
+#p.add_option('-p','--startPause',action='store',type='float',
+#                              dest='startPause',metavar='0.0',
+#                              nargs=1, default = 0.0,
+#                           help="Seconds to wait between n initial launches")
+#
+#p.add_option('-P','--allPause',action='store',type='float',
+#                              dest='allPause',metavar='0.0',
+#                              nargs=1, default = 0.0,
+#                                 help="Seconds to wait between all launches")
+#
+#p.add_option('-v','--verbose',action='store_true',dest='verbose', default=False,
+#                        help="Print commands to stdout as they are launched")
+#
+#p.add_option('-e','--echoOnly',action='store_true',dest='echoOnly', default=False,
+#                     help="Do not actually run the commands, just echo them")
+
+options,arguments = p.parse_args()
+
+
+hostStringList = arguments #['menard:12','orms238-01:8','orms238-02:4','orms238-03:3']
+userName = os.environ["USER"]
+cwd = os.path.abspath(os.getcwd())
+
+
+inFile = sys.stdin
+
+commandLines = [line for line in inFile.readlines() if line.split()]
+
+
+hostList = []
+for hostString in hostStringList:
+   try:
+      words = hostString.split(':')
+      hostList.append((words[0],int(words[1])))
+   except:
+      msg = "\n\nProblem parsing host info: '%s'\n\n" % hostString
+      print >> sys.stderr, msg
+      sys.exit(1)
+
+
+nJobs = len(commandLines)
+
+nProcessors = sum([h[1] for h in hostList])
+fractionList = [int(ceil(nJobs*float(h[1])/nProcessors)) for h in hostList]
+hostList = [(h[0],h[1],f) for h,f in zip(hostList,fractionList)]
+#print sum([h[2] for h in hostList])
+
+#--- initialize a list of jobs to run on current host
+jobListForThisHost = []
+allProcessList = []
+
+#--- loop over all hosts
+for thisHostName,nProcessorsThisHost,nJobsToRunThisHost in hostList:
+   #--- if there are jobs remaining
+   if commandLines:
+      #--- while this host can still accept jobs and while new jobs need starting
+      while (len(jobListForThisHost) < nJobsToRunThisHost)  and commandLines:
+         #--- add a job to this host
+         jobListForThisHost.append(commandLines.pop(0))
+      
+      #--- the joblist for this host is full, so create an ssh command to run it
+      cmd = "ssh %s@%s 'cd %s; cat - | p.parallel -n %d' " % (userName,thisHostName,
+                                                          cwd, nProcessorsThisHost)
+      p =  subprocess.Popen(['bash','-c',cmd],shell=False,stdin=subprocess.PIPE)
+      for jobCommand in jobListForThisHost:
+         p.stdin.write(jobCommand)
+      p.stdin.close()
+      allProcessList.append(p)
+      
+      #--- prepare for next iteration
+      jobListForThisHost = []
+      
+      #--- give the ssh process a little time to breath
+      time.sleep(1)
+      
+
+for index,p in enumerate(allProcessList):
+   p.wait()
+   
+   
+print '\n\n#*** Done parallel jobs on all machines\n\n'   
+   #print hostName,nProcessors,nJobsToRun
+
+
+sys.exit()   
+
+
+
+
+#print nJobs,nProcessors
+#sys.exit()
+
+
+
+
+for h in hostList:
+   print h
+   
+
+#for c in commandLines:
+#   print c,

@@ -1,0 +1,25 @@
+#! /usr/bin/env ppython
+
+import re
+import sys
+import optparse
+
+
+#--- set up to handle command line arguments
+description="Grab a specified portion of each line on stdin"
+usage = "cat file.txt | %prog -c ':3' #execute 'print line[:3]' for line in stdin"
+p = optparse.OptionParser(usage,description=description)
+p.add_option('-c','--columns',action='store',type='string',
+      dest='columns', metavar="colString",default=None,help="python index to apply to each string")
+
+
+#--- parse the input arguments
+options,arguments=p.parse_args()
+
+if options.columns == None:
+   sys.stderr.write(p.get_usage())
+   sys.exit()
+
+for line in sys.stdin:
+   exec 'print line[%s].strip()' % options.columns
+

@@ -1,0 +1,85 @@
+                           
+                           DATA PRODUCTIVITY TOOLKIT 
+
+Description
+--------------------------------------------------------------------------------
+ The Data Productivity Toolkit is a collection of linux command-line tools
+ designed to facilitate the analysis of text-based data sets.  Modeled after the
+ general linux pipeline tools such as awk, grep, and sed, the kit provides
+ powerfull tools for selecting/combining data, performing statistics, and
+ visualizing results.  The tools are all written in python and in many instances
+ provide a command-line API to basic python and numpy/scipy/matplotlib routines.
+
+Prerequisites
+--------------------------------------------------------------------------------
+ The Data Productivity Toolkit is written completely in python.  It does,
+ however, require that the following third-party python modules be installed.
+  - numpy
+  - scipy
+  - matplotlib
+  - mpl-toolkits.basemap
+  - mpl_toolkits.natgrid
+  - jinja2
+  - django
+
+Installation
+--------------------------------------------------------------------------------
+ 1) Copy all files into a directory.  
+ 2) Add that directory to your path.
+ 3) In that directory, create a symbolic link with the name ppython.  It should
+    point to the python install on your system that contains the modules listed
+    above. (Note: it is a good idea to use a python install created by the 
+    utitity virtualenv.  This will allow good flexibility for maintaining a
+    version of python best suited to run the toolkit. Note that the package
+    ships with a ppython symlink to /usr/bin/python.
+ 4) Make sure your install of matplotlib is capable of sending plots to the 
+    screen.  You may have to set your matplotlib graphics back-end appropriately.
+
+
+List of tools (run with -h option for documentaion)
+--------------------------------------------------------------------------------
+ p.bar            Creates bar charts
+ p.binit          Assigns data to 2 dimensional bin structure
+ p.cat            Rearrages columnar data into key,x,y format
+ p.catToTable     Create a table from data in key,x,y format
+ p.cdf            Plots the cumulative distribution
+ p.cl             An awk-like math utility
+ p.color          Makes color scatter plots
+ p.cumsum         Computes the cumulative sum of inputs   
+ p.datetime       Converts text-based time stamps to seconds from an epoch
+ p.dedup          Removes duplicate keys
+ p.distribute     Distribute jobs across computers efficiently
+ p.exec           Sequentially run commands read from stdin
+ p.gps2utc        Convert gps time to utc time
+ p.grab           Grab columns from a file with python-like indexing
+ p.grabHeader     Extract the commented header from a file
+ p.groupStat      Perform statistics over keyed subgroups of input
+ p.hist           Plots a histogram 
+ p.htmlWrap       Create an html wrapper for images in a directory
+ p.interp         Does polynomial interpolation
+ p.join           Join two files on specified key columns
+ p.link           Link to files based on specified key columns
+ p.linspace       Generate a linear spaced sequence of numbers
+ p.map            Plot points on a map
+ p.medianFilter   Runs data through a median filter
+ p.minMax         Find min/max values in specified data column
+ p.multiJoin      Join multiple files together based on key
+ p.normalize      Normalizes input data
+ p.parallel       Run commands in parallel
+ p.parallelSSH    Run commands in parallel across several machines
+ p.plot           Plot points on a graph
+ p.quadAdd        Add all columns from stdin in quadrature
+ p.quantiles      Compute quantiles from input data
+ p.rand           Generate a sequence of random numbers
+ p.rex            Bring python rex to the command line
+ p.scat           Make a scatter plot of input data
+ p.sed            A sed-like utility with python syntax
+ p.shuffle        Randomly shuffle rows of data
+ p.smooth         Smooth data
+ p.sort           Sort data based on specified keys
+ p.split          Split data based on a supplied delimeter  
+ p.strip          Remove comments and/or nans from rows
+ p.tableFormat    Nicely format input columns in a table format
+ p.template       Bring jinja templates to the command line
+ p.utc2gps        Convert utc time to gps time
+ p.utc2local      Convert utc time to local time given a lon

@@ -1,0 +1,89 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from math import floor
+import datetime
+import string
+
+#===============================================================================
+if __name__ == "__main__":
+   
+   
+   
+   
+   unitDict = {
+               'second': 1.,
+               'minute': 60.,
+               'hour': 3600.,
+               'day': 24. * 3600.,
+               'week': 7. * 24. * 3600.,
+               'date': 1,
+              }
+   unitList = unitDict.keys()
+   
+   epochDict = {
+               'J2000':datetime.datetime(2000,1,1,12,0,0),
+               'Y2K':datetime.datetime(2000,1,1,0,0,0),
+               }
+   epochList = epochDict.keys()
+   
+   
+   
+   
+   #--- set up the option parser
+   description = "This program calculates local solar time from a J2000 "
+   description += "time stamp.  Data is supplied on stdin.  You specify "
+   description += "the columns holding J2000 time and longitude.  The output"
+   description += "will be a copy of your input lines prepended by the hour "
+   description += "of the day in local solar time which is defined by the "
+   description += "equation t_local = t_utc + lon/(15*deg).  The appropriate "
+   description += "conversions to make 180<lon<180 are automatically performed. "
+
+   usage = "%prog [options args]"
+   p = optparse.OptionParser(description=description, usage = usage)
+   p.add_option('-t','--timeCol',action='store',type='int',dest='timeCol',
+         default=0,metavar="0", help="Input column with time in J2000 seconds")
+   
+   p.add_option('-l','--lonCol',action='store',type='int',dest='lonCol',
+         default=1,metavar="1", help="File column containing longitude (degrees)")
+
+   options,arguments = p.parse_args()
+   
+   colJ2000 = options.timeCol
+   colLon = options.lonCol
+   j2000Epoch = datetime.datetime(2000,1,1,12)
+      
+   #--- loop over all lines in stdin
+   for line in sys.stdin:
+      #--- start try block for making sure that broken pipes exit nicely
+      try:
+         #--- split the line into words
+         words = line.split()
+         if words:
+            timeJ2000 = float(words[colJ2000])
+            lon = float(words[colLon])
+            if lon > 180:
+               lon = lon - 360.
+            deltaTimeObj = datetime.timedelta(0,timeJ2000)
+            utcTimeObj = j2000Epoch + deltaTimeObj
+            utcHour = utcTimeObj.hour
+            utcMinute = utcTimeObj.minute
+            utcSecond = utcTimeObj.second
+            utcMicrosecond = utcTimeObj.microsecond
+            
+            utcFractionHour = utcHour + float(utcMinute)/60. + float(utcSecond)/3600. + float(utcMicrosecond)/(3600*1000000)
+            localFractionHour = utcFractionHour + lon/15.
+            while localFractionHour < 0:
+               localFractionHour += 24
+            while localFractionHour > 24:
+               localFractionHour -= 24
+            
+            print "%0.15g   %s" % (localFractionHour,line.strip())
+         
+      #--- exit quietly if IOError (because it's probably a broken pipe)
+      except IOError:
+         sys.exit()
+      
+   

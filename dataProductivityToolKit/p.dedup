@@ -1,0 +1,76 @@
+#! /usr/bin/env ppython
+
+
+import os
+import re
+import sys
+import datetime
+import optparse
+import copy
+
+
+
+#--- set up the option parser
+description = "Remove duplicate items from a file using specifed cols as keys. "
+description += "The outout is a key-sorted replica of the input "
+description += "that contains only the last encountered instance of any "
+description += "duplicate key"
+usage = "cat file.txt | %prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-k','--keyValList',action='store',type='string',
+                                    dest='keyCol',metavar='keyCol',default="0",
+                                    help="Colon delimited col list for key."+
+                                          " (Col numbering like python lists)")
+options,arguments = p.parse_args()
+
+
+#--- get the string that describes which cols to use as the key
+keyColString = options.keyCol
+
+#--- parse the keyColString into a list of columns
+keyColList = [int(s) for s in keyColString.split(":")]
+
+#--- initialize a dictionary of lines
+tupDict = {}
+#--- loop over all input lines
+for line in sys.stdin:
+   words = line.split()
+   #--- ignore empty lines
+   if words:
+      #--- initialize a list to hold key fields for this line
+      keyList = []
+      #--- loop over all key columns to generate a key-tuple
+      for nk in range(len(keyColList)):
+         #--- try to convert the key to a float
+         try:
+            keyList.append(float(words[keyColList[nk]]))
+         #--- if invalid float, just save keyVal as a string
+         except ValueError:
+            keyList.append(copy.copy(words[keyColList[nk]]))
+      #--- make a tuple out of the key values for easy sorting later
+      keyVal = tuple(keyList)
+      #--- assign current line to its key      
+      tupDict[keyVal] = line
+      
+#--- loop over all keys in sorted order
+for key in sorted(tupDict.keys()):
+   try:
+      sys.stdout.write(tupDict[key])
+   except IOError:
+      sys.exit()
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+   

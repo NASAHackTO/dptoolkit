@@ -1,0 +1,23 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import subprocess
+import string
+import optparse
+
+#--- set up the input arugments to provide help
+description = "This script will sequentially run in series a list of commands "
+description += "supplied on stdin. "
+usage = "cat commandFile.txt | %prog "
+p = optparse.OptionParser(description=description, usage = usage)
+options,arguments = p.parse_args()
+
+#--- loop over stdin input lines
+for line in sys.stdin:
+   words = line.split()
+   #--- if line is not empty
+   if words:
+      #--- execute the line as a command
+      cmd = line.strip()
+      p = subprocess.Popen(['bash','-c',cmd])
+      p.wait()

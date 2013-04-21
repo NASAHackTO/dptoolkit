@@ -1,0 +1,70 @@
+#! /usr/bin/env ppython
+
+import sys
+import string
+import optparse
+import re
+
+
+description = "Print formatted columns to stdout"
+usage = "cat file.txt | %prog [options]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-w','--widthGlobal',action='store',type='string',
+                                             dest='widthGlobal',metavar='20',
+                                       help="global width to apply to all cols",
+                                                                   default = 20)
+p.add_option('-c','--widthForCol',action='store',type='string',
+                             dest='widthForCol',metavar="'col:width|col:width'",
+ help="override global width on a per column basis (like python list indexing)",
+                                                                   default = "")
+
+p.add_option('-H','--header',action='store',type='string',
+                                             dest='header',metavar="'h1|h2|h3'",
+                                              help="pipe delimited header list",
+                                                                   default = '')
+options,arguments = p.parse_args()
+
+
+rexColon = re.compile(r'(-?\d+):(-?\d+)')
+
+globalFormatString = "%%-%ss" % options.widthGlobal
+
+colWidthStringList = [s for s in options.widthForCol.split('|') if s]
+headerInitList = options.header.split('|')
+
+
+headerNeedsPrinting = True
+
+
+for line in sys.stdin:
+   try:
+      words = line.split()
+      if words:
+         if headerNeedsPrinting:
+            nCols = len(words)
+            headerList = ["" for c in range(nCols)]
+            formatList = [globalFormatString for c in range(nCols)]
+            colWidthList = [int(options.widthGlobal) for c in range(nCols)]
+            for colWidth in colWidthStringList:
+               m = rexColon.match(colWidth)
+               if m:
+                  colNum,colWidth = m.groups()
+                  formatList[int(colNum)] = "%%-%ss" % colWidth
+                  colWidthList[int(colNum)] = int(colWidth)
+            for index,colHeader in enumerate(headerInitList):
+               headerList[index] = colHeader
+            
+            underLineList = ['-'*(w-2) for w in colWidthList]
+            if headerList[0]:
+               headerList[0] = '#'+headerList[0]
+            underLineList[0] = '#'+underLineList[0][:-1]
+            if headerList[0]:
+               print ''.join(formatList) % tuple(headerList)
+               print ''.join(formatList) % tuple(underLineList)
+            headerNeedsPrinting = False
+      
+         print ''.join(formatList) % tuple(words)
+         sys.stdout.flush()
+   except IOError:
+      sys.exit()

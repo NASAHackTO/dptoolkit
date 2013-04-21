@@ -1,0 +1,154 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import string
+import copy
+import re
+from pylab import linspace
+
+
+#--- set up the option parser
+description =  "This script will assign data sent on stdin to uniformly "
+description += "distributed bins.  The bins are auto calculated but can "
+description += "be explicitly defined with command line options. You can "
+description += "restrict the output to a designated set of input columns. "
+description += "The selected columns will be prepended by four values: "
+description += "xBinIndex, yBinIndex, xBinCenter, yBinCenter. "
+
+usage = "cat file.txt | %prog [options]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-x','--xDataCol',action='store',type='int',
+                                    dest='xDataCol',metavar='0',default=0,
+                                            help="Column containing x data to bin")
+
+p.add_option('-y','--yDataCol',action='store',type='int',
+                                    dest='yDataCol',metavar='1',default=1,
+                                            help="Column containing y data to bin")
+
+p.add_option('-o','--outColList',action='store',type='string',
+                                  dest='outColList',metavar="':'",default = ':',
+                              help="Pipe delimited list of output col ranges."+
+                                           " (Col numbering like python lists)")
+
+p.add_option('--xlim',action='store',type='string',
+                                               dest='xlim', metavar="xmin:xmax")
+
+p.add_option('--ylim',action='store',type='string',
+                                               dest='ylim', metavar="ymin:ymax")
+
+p.add_option('--nx',action='store',type='int',
+                      dest='nx',metavar='30',default=30,help="Number of x bins")
+
+p.add_option('--ny',action='store',type='int',
+                      dest='ny',metavar='30',default=30,help="Number of y bins")
+p.add_option('-s','--sort',action='store_true', default=False,
+      dest='sort', help='Sort output by bin numbers')
+
+
+
+
+options,arguments = p.parse_args()
+
+#--- parse the colspec list into a command object to be executed on every line
+outColSpecList =  options.outColList.split("|")
+cmd = ""
+for colSpec in outColSpecList:
+   if cmd:
+      cmd += "+"
+   if ':' in colSpec:
+      cmd += "words[%s]" % colSpec
+   else:
+      cmd += "[words[%s]]" % colSpec
+cmd = "outListNaked.append("+cmd+")"
+colSpecExecObj = compile(cmd,"command",'exec')
+
+#--- loop over all input lines in stdin and load an array of wordLists
+#wordListArray = []
+outListNaked = []
+xList,yList = [],[]
+xCol,yCol = options.xDataCol,options.yDataCol
+for line in sys.stdin:
+   words = line.split()
+   if words:
+      xList.append(float(words[xCol]))
+      yList.append(float(words[yCol]))
+      exec colSpecExecObj
+
+#--- set default limits to None
+xMin,xMax,yMin,yMax = None,None,None,None
+
+#--- set any command-line limits
+for limString in ['xlim','ylim']:
+   exec 'lim = options.%s' % limString
+   if not lim == None:
+      exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+      if m:
+         exec "%sMin,%sMax = float(m.group(1)),float(m.group(2))" % (limString[0],limString[0])
+
+#--- auto calc any non specified limits
+if (xMin==None):
+   xMin = min(xList)
+if (xMax==None):
+   xMax = max(xList)
+if (yMin==None):
+   yMin = min(yList)
+if (yMax==None):
+   yMax = max(yList)
+   
+#--- calculate arrays containing bounding values for each bin   
+xEdges = linspace(xMin,xMax,options.nx+1)
+yEdges = linspace(yMin,yMax,options.ny+1)
+dx = xEdges[1] - xEdges[0]
+dy = yEdges[1] - yEdges[0]
+xCenters = xEdges[:-1] + 0.5 * dx
+yCenters = yEdges[:-1] + 0.5 * dy
+
+
+
+#---print the output
+try:
+   #--- print the sorted version
+   outTupList = []
+   if options.sort:
+      for xPoint,yPoint,outList in zip(xList,yList,outListNaked):
+         if (xPoint > xCenters[0]) and (xPoint < xCenters[-1]):
+            if (yPoint > yCenters[0]) and (yPoint < yCenters[-1]):
+               xIndex = int(round((xPoint - xCenters[0])/dx))
+               yIndex = int(round((yPoint - yCenters[0])/dy))
+               xCenter,yCenter = xCenters[xIndex],yCenters[yIndex]
+               outTupList.append((xIndex,yIndex,xCenter,yCenter,string.join(outList,"  ")))
+      for outTup in sorted(outTupList):
+         print outTup[0],outTup[1],outTup[2],outTup[3],outTup[4]
+
+
+   #--- print the unsorted version
+   #elif options.count:
+   #      
+   #   for xPoint,yPoint,outList in zip(xList,yList,outListNaked):
+   #      if (xPoint > xCenters[0]) and (xPoint < xCenters[-1]):
+   #         if (yPoint > yCenters[0]) and (yPoint < yCenters[-1]):
+   #            xIndex = int(round((xPoint - xCenters[0])/dx))
+   #            yIndex = int(round((yPoint - yCenters[0])/dy))
+   #            xCenter,yCenter = xCenters[xIndex],yCenters[yIndex]
+   #            print xIndex,yIndex,xCenter,yCenter,string.join(outList,"  ")
+
+
+
+   #--- print the unsorted version
+   else:   
+      for xPoint,yPoint,outList in zip(xList,yList,outListNaked):
+         if (xPoint > xCenters[0]) and (xPoint < xCenters[-1]):
+            if (yPoint > yCenters[0]) and (yPoint < yCenters[-1]):
+               xIndex = int(round((xPoint - xCenters[0])/dx))
+               yIndex = int(round((yPoint - yCenters[0])/dy))
+               xCenter,yCenter = xCenters[xIndex],yCenters[yIndex]
+               print xIndex,yIndex,xCenter,yCenter,string.join(outList,"  ")
+except IOError:
+   pass   
+
+
+
+

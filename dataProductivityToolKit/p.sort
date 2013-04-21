@@ -1,0 +1,62 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import copy
+
+#--- set up the option parser
+description = "Sort input based on specified columns"
+usage = "%prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-k','--keyValList',action='store',type='string',
+                                    dest='keyCol',metavar='keyCol',default="0",
+                                    help="Colon delimited col list for key."+
+                                          " (Col numbering like python lists)")
+
+options,arguments = p.parse_args()
+
+
+#--- get the string that describes which cols to use as the key
+keyColString = options.keyCol
+
+#--- parse the keyColString into a list of columns
+keyColList = [int(s) for s in keyColString.split(":")]
+
+
+
+#--- initialize a tuple list to hold all input lines
+tupList = []
+
+
+#--- loop over all input lines
+for line in sys.stdin:
+   #--- split the line into words
+   words = line.split()
+   #--- ignore empty lines
+   if len(words)> 0:
+      #--- initialize a keyList for this line
+      keyList = []
+      #--- loop over all key columns
+      for nk in range(len(keyColList)):
+         #--- try to convert the key to a float
+         try:
+            keyList.append(float(words[keyColList[nk]]))
+         #--- if invalid float, just save keyVal as a string
+         except ValueError:
+            keyList.append(copy.copy(words[keyColList[nk]]))
+
+      #--- only include lines with valid key
+      if keyList:
+         #--- append this line to the tupList
+         tupList.append((tuple(keyList),line.strip()))
+         
+#--- print the input lines in sorted order
+try:
+   for lineTup in sorted(tupList):
+      print lineTup[1]
+#--- exit broken pipes quietly
+except IOError:
+   sys.exit()
+         

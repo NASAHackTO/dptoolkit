@@ -1,0 +1,183 @@
+#! /usr/bin/env ppython
+
+import os
+import re
+import sys
+import datetime
+import optparse
+import copy
+from numpy import mean, median, std, sum
+from scipy.stats import scoreatpercentile
+
+#--- define the valid stats that can be performed on the grouped lists
+validStats = {
+              "count" : len,
+              "mean" : mean,
+              "median" : median,
+              "std" : std,
+              "sum" : sum,
+              "max" : max,
+              "min" : min,
+              "percentile": None  # define this below
+             }
+
+
+
+#--- set up the option parser
+description = "Do stats on data groupings"
+usage = "%prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-k','--keyValList',action='store',type='string',
+                                    dest='keyCol',metavar='keyCol',default="0",
+                                    help="Colon delimited col list for key."+
+                                          " (Col numbering like python lists)")
+p.add_option('-d','--data',action='store',type='int',
+                                     dest='dataCol',metavar='dataCol',default=2,
+                                     help="Col numbering like python lists")
+p.add_option('-s','--stat',action='store',type='string',
+                                 dest='stat',metavar='statFunction',default="mean:std:count",
+                                 help = "colon separated statFunction list. "+
+                                        "(default mean:std:count) "+
+                                        "Valid statFunctions are %s"%repr(sorted(validStats.keys())))
+p.add_option('-p','--percentileVals',action='store',type='string',
+                                 dest='percentiles',metavar='percentileList',default="15.866:50:84.136",
+                                 help = "colon separated list of percentile values."+
+                                        "(defaults to median and 1-sigma values of '15.866:50:84.136')")
+
+
+options,arguments = p.parse_args()
+
+#---define a percentile function to use
+percentileList = [float(w) for w in options.percentiles.split(':')]
+
+def percentileFunc(x,percentileList = percentileList):
+   outList = []
+   for percentile in percentileList:
+      value = scoreatpercentile(x,percentile)
+      outList.append((percentile,value))
+   return outList
+
+validStats['percentile'] = percentileFunc   
+
+
+
+#--- get the string that describes which cols to use as the key
+keyColString = options.keyCol
+
+##--- get the type of stat to perform
+#try:
+#   statFunction = validStats[options.stat]
+#except:
+#   msg = "\n\nStat Function '%s' not recognized\n Valid options are %s\n" % (options.stat,repr(sorted(validStats.keys())))
+#   raise StandardError,msg
+
+#--- parse the keyColString into a list of columns
+keyColList = [int(s) for s in keyColString.split(":")]
+dataCol = options.dataCol
+
+#--- initialize a dictionary to hold the key/value pairs
+dataDict = {}
+
+#--- define a list of keyColList indexes so I don't have to do it for each iteration
+rangeKeyColList = range(len(keyColList))
+
+#--- loop over all input lines
+for line in sys.stdin:
+   #--- split the line into words
+   words = line.split()
+   #--- ignore empty lines
+   if len(words)> 0:
+      #--- initialize a list to hold key fields for this line
+      keyList = []
+      #--- loop over all key columns
+      for nk in rangeKeyColList:
+         #--- try to convert the key to a float
+         try:
+            keyList.append(float(words[keyColList[nk]]))
+         #--- if invalid float, just save keyVal as a string
+         except ValueError:
+            keyList.append(copy.copy(words[keyColList[nk]]))
+      #--- make a tuple out of the key values for easy sorting later
+      keyVal = tuple(keyList)
+      #--- get the data value
+      dataVal = float(words[dataCol])
+      
+      #--- try appending data to the dictionary
+      try:
+         dataDict[keyVal].append(dataVal)
+      #--- if this key couldn't be found, initialize it with this value
+      except KeyError:
+         dataDict[keyVal] = [dataVal]
+
+
+#--- get the list of stat function names
+statFunctionNameList = options.stat.split(":")
+statFunctionList = [validStats[fn] for fn in statFunctionNameList]
+
+#--- find the width of the widest key
+maxKeyWidth = -1
+for keyValTup in dataDict.keys():
+   for key in keyValTup:
+      maxKeyWidth = max(maxKeyWidth,len(repr(key)))
+maxKeyWidth += 2
+maxKeyWidth = max(maxKeyWidth,10)
+
+totalKeyWidth = maxKeyWidth*len(keyColList)
+
+
+
+#--- print the header
+sys.stdout.write("#Key".ljust(totalKeyWidth)+"")
+for statFuncName in statFunctionNameList:
+   if statFuncName == 'percentile':
+      for percentile in percentileList:
+         outString = "percentile=%0.5g" % (percentile)
+         outString = outString.ljust(30)
+         sys.stdout.write(outString)
+   else:
+      outString = statFuncName.ljust(30)
+      sys.stdout.write(outString)
+sys.stdout.write("\n")
+
+
+
+#--- print dashes
+sys.stdout.write(('#'+'-'*(totalKeyWidth-3)).ljust(totalKeyWidth)+"")
+for statFuncName in statFunctionNameList:
+   if statFuncName == 'percentile':
+      for percentile in percentileList:
+         outString = ('-'*25).ljust(30)
+         sys.stdout.write(outString)
+   else:
+      outString = ('-'*25).ljust(30)
+      sys.stdout.write(outString)
+sys.stdout.write("\n")
+
+
+#--- calculate and print the grouped stats
+try:
+   for keyVal in sorted(dataDict.keys()):
+      #--- print the correct representation of each key element
+      for key in keyVal:
+         if type(key) == type("xxx"):
+            outString = "%s" % key 
+         else:
+            outString = repr(key)
+         sys.stdout.write(outString.ljust(maxKeyWidth)+"")
+         
+      #--- print the correct stat for this key
+      for statFuncName,statFunction in zip(statFunctionNameList,statFunctionList):
+         if statFuncName == 'percentile':
+            outStat = statFunction(dataDict[keyVal])
+            for statTup in outStat:
+               outString = repr(float(statTup[1])).ljust(30)
+               sys.stdout.write(outString+"")
+         else:
+            outStat = statFunction(dataDict[keyVal])
+            outString = repr(float(outStat)).ljust(30)
+            sys.stdout.write(outString+"")
+      sys.stdout.write("\n")
+except IOError:
+   sys.exit()
+

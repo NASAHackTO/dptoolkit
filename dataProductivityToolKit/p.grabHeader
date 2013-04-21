@@ -1,0 +1,50 @@
+#! /usr/bin/env ppython
+
+import sys
+import string
+import optparse
+import re
+
+description = "Grab header information from a file"
+usage = "cat file.txt | %prog [options]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-r','--rexHeader',action='store',type='string',
+                                          dest='rexHeader',metavar="'^\s*?#[^-].*'",
+                                                             default='^\s*?#[^-].*',
+                                      help="regex used to identify header line")
+
+p.add_option('-d','--rexDoneHeader',action='store',type='string',
+                                     dest='rexDoneHeader',metavar="'\s*?[^#].*'",
+                                                            default='\s*?[^#].*',
+                            help="regex used to identify first non-header line")
+
+
+p.add_option('-T','--tableFormat',action='store_true', dest='tableFormat',
+                                      help="Print header as tableFormat string",
+                                                                   default = '')
+options,arguments = p.parse_args()
+
+rexHeader = re.compile(options.rexHeader)
+rexDone = re.compile(options.rexDoneHeader)
+
+headerLineList = []
+for line in sys.stdin:
+   mDone = rexDone.match(line)
+   if mDone:
+      break
+   mHeader = rexHeader.match(line)
+   if mHeader:
+      headerLineList.append(line)
+
+
+if headerLineList:
+   if options.tableFormat:
+      headerLine = re.sub('#','',headerLineList[-1])
+      print string.join(headerLine.split(),'|')
+      sys.exit()
+   else:
+      for line in headerLineList:
+         print line.strip()
+   
+

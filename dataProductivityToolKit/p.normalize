@@ -1,0 +1,104 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import copy
+import string
+
+#--- set up the option parser
+description = "Normalize specified columns"
+usage = "%prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-c','--colList',action='store',type='string',
+                                    dest='colString',metavar='colString',default="0",
+                                    help="Colon delimited col list for key."+
+                                          " (Col numbering like python lists)")
+
+p.add_option('-n','--normalizer',action='store',choices=["sum","max"],
+                                            dest='normalizer',metavar='sum/max',
+                                     help="Either sum=1 or max=1 normalization")
+
+
+options,arguments = p.parse_args()
+
+
+#--- get the string that describes which cols to use as the key
+colString = options.colString
+
+#--- get the type of normalizer
+normalizer = options.normalizer
+
+#--- parse the keyColString into a list of columns
+colList = [int(s) for s in colString.split(":")]
+
+
+
+#--- initialize a lineList
+wordListArray = []
+normalizerList = [0.0 for c in colList]
+
+#--- read all input lines
+for line in sys.stdin:
+   #--- split the line into words
+   wordList = line.split()
+   #--- ignore empty lines
+   if len(wordList)> 0:
+      #--- append this wordList to the array
+      wordListArray.append(copy.deepcopy(wordList))
+      #--- loop over all cols to normalize
+      for index,col in enumerate(colList):
+         #--- if this col exists
+         if col < len(wordList):
+            #--- increment the normalizer appropriately
+            if normalizer == "sum":
+               normalizerList[index] += float(wordList[col])
+            elif normalizer == "max":
+               normalizerList[index] = max([float(wordList[col]),
+                                                         normalizerList[index]])
+               
+
+#--- print the output
+for wordList in wordListArray:
+   for index,col in enumerate(colList):
+      #--- if this col exists
+      if col < len(wordList):
+         #print 'normalizing by', normalizerList[index]
+         wordList[col] = "%0.15g" % (float(wordList[col])/normalizerList[index])
+   outLine = string.join(wordList,"   ")
+   print outLine
+
+      
+               
+            
+      
+
+      
+      
+      
+      
+      #
+      ##--- loop over all key columns
+      #for nk in range(len(colList)):
+#         
+#         #--- try to convert the key to a float
+#         try:
+#            keyList.append(float(words[keyColList[nk]]))
+#         #--- if invalid float, just save keyVal as a string
+#         except ValueError:
+#            keyList.append(copy.copy(words[keyColList[nk]]))
+#
+#      #--- only include lines with valid key
+#      if keyList:
+#         #--- append this line to the tupList
+#         tupList.append((tuple(keyList),line.strip()))
+#         
+##--- print the input lines in sorted order
+#try:
+#   for lineTup in sorted(tupList):
+#      print lineTup[1]
+##--- exit broken pipes quietly
+#except IOError:
+#   sys.exit()
+#         

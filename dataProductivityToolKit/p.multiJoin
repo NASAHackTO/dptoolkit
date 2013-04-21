@@ -1,0 +1,152 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import copy
+import string
+
+
+#--- set up the option parser
+description =  "This script joins together multiple files with identical "
+description += "column structure.  A set of key columns must be specified. "
+description += "For every key set that exists in all files, the script will "
+description += "print out the key followed by one set of output columns for "
+description += "each input file."
+
+usage = "%prog -k '0:2|3:5' -o '6:8|10|12' file1.txt file2.txt ..."
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-k','--keyColList',action='store',type='string',
+                                    dest='keyColList',metavar='keyColList',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+p.add_option('-o','--outColList',action='store',type='string',
+                                    dest='outColList',metavar='outColList',
+                                    help="Pipe delimited list of col ranges."+
+                                           " (Col numbering like python lists)")
+
+options,arguments = p.parse_args()
+
+
+#--- enforce required arguments
+if options.keyColList == None:
+   p.print_help()
+   print '\n\nError:  Must specify keyColList\n\n'
+   sys.exit()
+if options.outColList == None:
+   p.print_help()
+   print '\n\nError:  Must specify outColList\n\n'
+   sys.exit()
+if len(arguments) < 2:
+   p.print_help()
+   print '\n\nError:  Must specify 2 or more files to join\n\n'
+   sys.exit()
+   
+#--- parse the key value and out value inputs
+keySpecList =  options.keyColList.split("|")
+outSpecList =  options.outColList.split("|")
+
+#---make sure all input files exist
+inFileList = arguments
+for file in inFileList:
+   if not os.path.isfile(file):
+      print '\n\nError: %s does not exist\n\n' % file
+      sys.exit()
+      
+
+
+#---initialize a dictionary to hold the joined results
+lineDict = {}
+
+#--- loop over all
+for fileName in inFileList:
+   
+   #####################
+   #print 'starting',fileName
+   #lineCount = 0
+   #####################
+
+   #--- open the file
+   file = open(fileName,'r')
+   
+   #--- loop over all lines in the file
+   for line in file:
+
+      ####################
+      #lineCount += 1
+      #if (lineCount % 10000) == 0:
+      #   print lineCount
+      ###################
+      
+      
+      #--- split the line into words
+      words = line.split()
+      
+      #---ignore empty lines
+      if words:
+         #--- initialize lists to hold key values and output values
+         keyColList = []
+         outColList = []
+         
+         #---make a key tuple
+         for keySpec in keySpecList:
+            if ':' in keySpec:
+               exec "keyColList.extend(words[%s])" % keySpec
+            else:
+               exec "keyColList.append(words[%s])" % keySpec
+         for index,key in enumerate(keyColList):
+            try:
+               keyColList[index] = float(key)
+            except:
+               pass
+            
+         keyTuple = tuple(keyColList)
+   
+         #---make an output list
+         for outSpec in outSpecList:
+            if ':' in outSpec:
+               exec "outColList.extend(words[%s])" % outSpec
+            else:
+               exec "outColList.append(words[%s])" % outSpec
+
+         #---try adding data to this key
+         try:
+            lineDict[keyTuple]['count'] += 1
+            lineDict[keyTuple]['outList'].extend(copy.copy(outColList))
+
+         #--- if it cant find the key, add a new one
+         except KeyError:
+            lineDict[keyTuple] = {'count':1,'outList':copy.copy(outColList)}
+            
+      
+#--- compute the number of input files
+numInputFiles = len(inFileList)
+      
+#---write the output
+for keyTup in sorted(lineDict.keys()):
+   lineObj = lineDict[keyTup]
+   count,outList = lineObj['count'],lineObj['outList']
+   
+   #--- if all files contributed to this key
+   if count == numInputFiles:
+      outString = ""
+      for keyElement in keyTup:
+         try:
+            outString += "%0.15g " % keyElement
+         except:
+            outString += "%s " %keyElement
+         
+      #outString = string.join(keyTup," ")
+      outString = outString +"   "+ string.join(outList," ")
+      print outString
+            
+            
+         
+               
+
+
+
+   
+   
+   

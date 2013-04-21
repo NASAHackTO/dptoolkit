@@ -1,0 +1,40 @@
+#! /usr/bin/env ppython
+import sys
+import re
+import optparse
+
+
+#--- set up to handle command line arguments
+description="Remove comments and optionally NaNs"
+usage = "cat fileName | %prog [optional args]"
+p = optparse.OptionParser(usage,description=description)
+p.add_option('-c','--commentToken',action='store',type='string',
+      dest='commentToken', metavar="cToken (default=#)",default='#',help="Can't be re reserved char")
+p.add_option('-n','--nanKill',action='store_true', default=False,
+      dest='killNaNs', help='Remove any line having a NaN')
+
+options,arguments=p.parse_args()
+
+killNaNs = options.killNaNs
+ct = options.commentToken
+
+rexComment = re.compile('\s*(?=\S+)([^'+ct+']+)'+ct+'?.*')
+rexNaN = re.compile('.*[nN][aA][nN].*')
+
+#--- read the data from stdin
+for line in sys.stdin:
+   mComment = rexComment.match(line)
+   if mComment:
+      try:
+         line = mComment.group(1).strip()
+         if killNaNs:
+            mNaN = rexNaN.match(line)
+            if not mNaN:
+               print line
+         else:
+            print line
+      except IOError:
+         sys.exit()
+
+
+

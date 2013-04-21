@@ -1,0 +1,82 @@
+#! /usr/bin/env ppython
+import sys
+import optparse
+from numpy import loadtxt,savetxt,vstack,ones,std,linspace
+from scipy import interpolate
+
+
+#--- set up the option parser
+description = "Do interpolation and/or fitting of data read from stdin.  "
+description += "Input is expected  in p.cat format with columns of "
+description += "[key,xValue,yValue].  A key value of 1 means that  "
+description += "xValue and yValue are an entry in xTable, yTable. "
+description += "A key value of 2 means that xValue is an interp point, and "
+description += "that yValue will be ignored.  yValue is needed only for the file "
+description += "to be parsed properly, but it is ignored.  Output is in the"
+description += "form of three columns. "
+description += "The first column is a key (1 for table data, 2 for interp data) "
+description += "and the remaining two cols hold the corresponding x,y points."
+usage = "cat file.txt | %prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-p','--polyOrder',action='store',type='int',
+                                    dest='polyOrder',metavar='3',default=3,
+                                    help="Polynomial order for interp fitting")
+
+p.add_option('-v','--varianceFraction',action='store',type='float',
+                                   dest='varianceFraction',metavar='0',default=0,
+         help="The ratio of target post-fit variance to the prefit variance.  "
+               "Setting ratio to zero will do interpolation instead of fitting")
+
+options,arguments = p.parse_args()
+
+#--- get the data from stdin and store it to xTable and yTable
+data = loadtxt(sys.stdin)
+key = data[:,0]
+xIn = data[:,1]
+yIn = data[:,2]
+del data
+
+#--- extract the table values
+tableIndex = (key==1)
+xTable = xIn[tableIndex]
+yTable = yIn[tableIndex]
+
+#--- extract the interp values
+interpIndex = (key==2)
+xInterp = xIn[interpIndex]
+
+#--- get additional command line arguments
+polyOrder = options.polyOrder
+
+varianceReductionFraction = options.varianceFraction
+
+targetVariance =  varianceReductionFraction*(std(yTable)**2)
+
+s = len(xTable)*targetVariance
+
+try:
+   splineParams = interpolate.splrep(xTable,yTable,s=s)
+except ValueError:
+   print "\n\nError in the interpolator.  Is xTable monatonic?\n\n"
+   raise ValueError
+
+yInterp = interpolate.splev(xInterp,splineParams)
+
+onesTable = ones(xTable.shape)
+outArrayTable = vstack((onesTable,xTable,yTable)).transpose()
+del xTable
+del yTable
+del onesTable
+savetxt(sys.stdout,outArrayTable,fmt="%0.16g")
+del outArrayTable
+
+onesInterp = 2*ones(xInterp.shape)
+outArrayInterp = vstack((onesInterp,xInterp,yInterp)).transpose()
+del xInterp
+del yInterp
+del onesInterp
+savetxt(sys.stdout,outArrayInterp,fmt="%0.16g")
+
+   
+

@@ -1,0 +1,41 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+import string
+
+#--- set up the option parser
+description = "Replace the specified columns with their cumulative sums"
+usage = "%prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-c','--colList',action='store',type='string',
+               dest='colListString',metavar='colListString',default="0",
+               help="Colon delimited list of columns to replace with cumulative sum")
+
+
+options,arguments = p.parse_args()
+
+#--- parse the colString into a list of columns
+colList = [int(s) for s in options.colListString.split(":")]
+maxCol = max(colList)
+
+#--- initialize a sum counter for each columns
+sumDict = dict([(col,0) for col in colList])
+
+
+#--- loop over all input lines
+for line in sys.stdin:
+   #--- split the line into words
+   wordList = line.split()
+   #--- ignore lines that don't have the right number of columns
+   if len(wordList) > maxCol:
+      #--- loop over all cumsum columns, replacing requested cols with their sums
+      for col in colList:
+         sumDict[col] += float(wordList[col])
+         wordList[col] = "%0.15g" % sumDict[col]
+      #--- print the modified word list
+      print string.join(wordList,'   ')
+      
+      

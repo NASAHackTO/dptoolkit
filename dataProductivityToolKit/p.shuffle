@@ -1,0 +1,36 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from numpy.random import permutation
+
+description = "Read lines from stdin and print a random permuation of them to stdout"
+usage = "cat data.txt %prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-n','--nLines',action='store',type='int',nargs=1,
+                                 dest='nLines',metavar='nLines',
+                                 help = "Return the first N lines after shuffling ")
+options,arguments = p.parse_args()
+
+
+#--- read the input lines from stdin
+lineList = []
+for line in sys.stdin:
+   lineList.append(line.strip())
+
+#--- create a randomly permuted sequence
+rowList = permutation(len(lineList))
+
+nOutRows = len(rowList)
+if not options.nLines == None:
+   nOutRows = options.nLines
+   
+for nr in rowList[:nOutRows]:
+   print lineList[nr]
+
+
+
+
+

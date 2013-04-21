@@ -1,0 +1,297 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import subprocess
+import multiprocessing as mp
+import optparse
+import time
+import resource
+import datetime
+
+#--- get the user and current working directory
+userName = os.environ["USER"]
+pwd = os.path.abspath(os.getcwd())
+
+#--- set up a queue to hold input commands
+cmdQ = mp.Queue()
+
+
+
+#===============================================================================
+class WorkerClass(object):
+   #----------------------------------------------------------------------------
+   def __init__(self, nJobs=1, hostName=None,nostdout=False,nostderr=False):
+      #--- define instance variables
+      self.hostName = hostName
+      self.nJobs = nJobs
+      self.jobList = []
+      self.nostdout = nostdout
+      self.nostderr = nostderr
+      self.suppressLoginInfo = suppressLoginInfo
+
+   #----------------------------------------------------------------------------
+   def startJobIfPossible(self):
+      #--- clean up all completed jobs
+      self.cleanFinishedJobs()
+      
+      #--- initialize a flag to inidicate no job started
+      jobStarted = False
+
+      #--- if this worker still has some capacity, start a job
+      if len(self.jobList) < self.nJobs:
+         #--- get a command from the queue
+         cmd = cmdQ.get()
+         cmd = cmd.strip()
+
+         #--- start the job, trapping for an OS error
+         try:
+            p = mp.Process(target=self._sysCallWrapper,args=(cmd,))
+            p.start()
+         except OSError:
+            msg = "\n\nError:  You are trying to fork too many jobs on master machine.\n"
+            sys.stderr.write(msg)
+            sys.exit(1)
+
+         #--- append the newly started job to the joblist for this worker and set the flag
+         self.jobList.append(p)
+         jobStarted = True
+      #--- return the flag
+      return jobStarted
+
+   #----------------------------------------------------------------------------
+   def cleanFinishedJobs(self):
+      #--- initialize number of jobs cleaned
+      jobWasCleaned = True
+      numJobsCleaned = 0
+
+      #--- keep looping if a job was cleaned
+      while jobWasCleaned:
+         #--- set default to be that a job wasn't cleaned
+         jobWasCleaned = False
+         #--- loop over all jobs for this worker
+         for index,job in enumerate(self.jobList):
+            #--- if this job is finished, clean it
+            if not job.is_alive():
+               p = self.jobList.pop(index)
+               jobWasCleaned = True
+               numJobsCleaned += 1
+               break
+      if numJobsCleaned > 0:
+         jobsWereCleaned = True
+      else:
+         jobsWereCleaned = False
+      return jobsWereCleaned
+
+
+   #----------------------------------------------------------------------------
+   def _sysCallWrapper(self,cmd):
+      inputCmd = cmd
+      #--- if a hostname is specified, add command to ssh and cd into the right directory
+      #if not self.hostName == None:
+      #   cmd = """ssh {usr}@{host} "cd {pwd}; {cmd}" """.format(usr=userName,host=self.hostName,pwd=pwd,cmd=cmd)
+      sshCmd = "ssh {usr}@{host} 'p.exec'".format(usr=userName,host=self.hostName)
+
+      #--- squash stdout if requested
+      if self.nostdout:
+         if self.hostName == None:
+            cmd += ' 1>/dev/null'
+         else:
+            sshCmd += ' 1>/dev/null'
+      #--- squash stderr if requested
+      if self.nostderr:
+         if self.hostName == None:
+            sshCmd += ' 2>/dev/null'
+         else:
+            cmd += ' 2>/dev/null'
+
+      #--- suppress login information if requested
+      if self.suppressLoginInfo:
+         if self.hostName == None:
+            cmd += r" 2> >(grep -P -v '^\|.*?\|$' | grep -v 'xauth' )"
+         else:
+            sshCmd += r" 2> >(grep -P -v '^\|.*?\|$' | grep -v 'xauth' )"
+
+      #--- start the command using subprocess, trapping of os error
+      try:
+         if self.hostName == None:
+            p = subprocess.Popen(['bash','-c',cmd])
+         else:
+            p = subprocess.Popen(['bash','-c',sshCmd],stdin=subprocess.PIPE)
+            p.stdin.write(cmd+"\n")
+            p.stdin.close()
+         exitCode = p.wait()
+
+         #--- if process was not successful,  add it to the top of the queue
+         if exitCode != 0:
+            cmdQ.put(inputCmd)
+            
+      except OSError:
+         msg = "\n\nError:  You are trying to fork too many jobs on master machine.\n"
+         sys.stderr.write(msg)
+         sys.exit(1)
+
+
+#===============================================================================
+if __name__ == "__main__":
+
+   #--- set up the input arugments
+   description = "This script will run a series of commands in parallel across "
+   description += "a selection of host computers. The commands are read from stdin. "
+   description += "You must specify the maximum number of jobs to run on each host. " 
+   description += "The jobs will be fed to each host on a first-come first-serve "
+   description += "basis as processors become available.  NOTE: You must have ssh "
+   description += "set up to log into each host without a password. "
+   description += "See: http://linuxproblem.org/art_9.html. "
+   description += "You can specify the default number of jobs to run on each "
+   description += "machine using the -n option.  This nunber will get overwritten "
+   description += "by any value you supply for the nProcesses part of the host parameter."
+
+   usage = "cat commandFile.txt | %prog [options] 'hostName1:nProcesses1' 'hostName2:nProcesses2'"
+   usage += "... 'hostNameN:nProcessesN'"
+   p = optparse.OptionParser(description=description, usage = usage)
+
+   p.add_option('-n','--nProcesses',action='store',type='int',
+                                 dest='nProcesses',metavar='4',
+                                 nargs=1, default = 4,
+                                 help="The default number of jobs to run on each machine.")
+   p.add_option('--notiming',action='store_true',dest='notiming', default=False,
+                           help="Don't print any timing information as jobs run")
+   p.add_option('--nostdout',action='store_true',dest='nostdout', default=False,
+                           help="Don't print stdout from the commands")
+   p.add_option('--nostderr',action='store_true',dest='nostderr', default=False,
+                           help="Don't print stderr from the commands")
+   p.add_option('--nologinfilter',action='store_true',dest='nologinfilter', default=False,
+                           help="Don't filter out ssh login banners from stderr")
+   options,arguments = p.parse_args()
+
+   #--- parse options
+   nProcsDefault = options.nProcesses
+   nostdout = options.nostdout
+   nostderr = options.nostderr
+   printProgress = not options.notiming
+   suppressLoginInfo = not options.nologinfilter
+   
+   #--- this may be an option later.  For now, force a pause while waiting
+   noPause = False
+
+   #--- initialize a list to hold hostnames and job counts
+   hostTupList = []
+
+   #--- read in any host info
+   hostStringList = arguments
+
+   #--- if no host info found, set up to do localhost stuff
+   if not hostStringList:
+      hostTupList = [(None,nProcsDefault)]
+
+   #--- if host list found, get all host info
+   for hostString in hostStringList:
+      if not ':' in hostString:
+         hostTupList.append((hostString,nProcsDefault))
+      else:
+         try:
+            words = hostString.split(':')
+            hostTupList.append((words[0],int(words[1])))
+         except:
+            msg = "\n\nProblem parsing host info: '%s'\n\n" % hostString
+            print >> sys.stderr, msg
+            sys.exit(1)
+   
+   #--- read the commands from stdin
+   commandList = sys.stdin.readlines()
+   
+   #--- put the commands into a queue
+   for cmd in commandList:
+      cmdQ.put(cmd)
+
+   #--- find the max number of processes allowed on the master computer
+   maxNumProcesses = resource.getrlimit(resource.RLIMIT_NPROC)[0]
+
+   #--- create a list of workers from the host list and number of jobs specified
+   workerList = []
+   for hostName,nJobs in hostTupList:
+      worker = WorkerClass(nJobs=nJobs,hostName=hostName,nostdout=nostdout,nostderr=nostderr)
+      workerList.append(worker)
+   
+
+
+   #--- initialize info to track progress
+   nCommandsStarted = 0
+   nTotalCommands = len(commandList)
+   startTime = datetime.datetime.now()
+   numTriesBeforePause = 100
+   nTries = 0
+
+   #--- loop untill all input commands have been consumed
+   while nCommandsStarted != nTotalCommands:
+      #--- loop over all worksers to see if they can accept jobs
+      for worker in workerList:
+         #--- do some logic to pause so that this script doesn't take up too much processor
+         nTries += 1
+         if nTries == numTriesBeforePause:
+            if not noPause:
+               time.sleep(.25)
+            nTries = 0
+
+         #--- get the host name of this worker for printing stuff later
+         hostName = ''
+         if not worker.hostName == None:
+            hostName = worker.hostName
+
+         #--- insert a small delay for ssh commands to avoid locking up all ssh resources for a machine
+         time.sleep(.15)
+
+         #--- figure out how many jobs are currently running
+         numProcesses = sum([len(w.jobList) for w in workerList])
+
+         #--- wait for a while if too many jobs getting spawned on master machine
+         #    The factor of 10 was chosen to work on a mac.  This could be changed if desired.
+         while int(numProcesses)*10 > int(maxNumProcesses):
+            worker.cleanFinishedJobs()
+            numProcesses = sum([len(w.jobList) for w in workerList])
+            time.sleep(.1)
+
+
+         #--- try starting a job on this worker
+         jobStarted = worker.startJobIfPossible()
+
+         #--- if job started succesfully
+         if jobStarted:
+            #--- increment number of started commands and print progress if desired
+            nCommandsStarted += 1
+            if printProgress:
+               currentTime = datetime.datetime.now()
+               timeDelta = (currentTime - startTime)
+               elapsedTime = timeDelta.days*3600*24 + timeDelta.seconds + timeDelta.microseconds*1e-6
+               estimatedTime = elapsedTime * float(nTotalCommands)/nCommandsStarted
+               sys.stderr.write('#:: {f:5.0f} percent : job {nn:6d} of {nt:6d} : time {ct:6.1f} of {tt:6.1f} : {ts} : {h}\n'.format(
+                                                                                                nn = nCommandsStarted,
+                                                                                                nt = nTotalCommands,
+                                                                                                f  = (100.*nCommandsStarted)/nTotalCommands,
+                                                                                                ts = currentTime.isoformat(),
+                                                                                                ct = elapsedTime,
+                                                                                                tt = estimatedTime,
+                                                                                                h = hostName
+                                                                                                ))
+            #--- break out of worker loop to work on next command
+            break
+
+   #--- print a status message if requested
+   if printProgress:
+      sys.stderr.write('#:::  Finishing up final jobs\n')
+   #--- finish up all started jobs
+   for worker in workerList:
+      while len(worker.jobList) > 0:
+         worker.cleanFinishedJobs()
+
+   #--- compute time info
+   currentTime = datetime.datetime.now()
+   timeDelta = (currentTime - startTime)
+   elapsedTime = timeDelta.days*3600*24 + timeDelta.seconds + timeDelta.microseconds*1e-6
+
+   #--- print final time info if requested
+   if printProgress:
+         sys.stderr.write('#:::: TotalTime {tt:6.1f} :  {ts}\n'.format(tt=elapsedTime,ts=currentTime.isoformat()))
+
+
+

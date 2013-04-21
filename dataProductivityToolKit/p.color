@@ -1,0 +1,399 @@
+#! /usr/bin/env ppython
+
+import sys
+import re
+from pylab import legend,xlabel,ylabel,title,gca,grid,show,cm,gcf,imshow
+from pylab import scatter,axis,griddata,meshgrid,figure, savefig
+from matplotlib.colors import LinearSegmentedColormap
+from numpy import loadtxt, linspace,array, logical_and, digitize, ndarray
+from numpy import pi, sin, cos
+import optparse
+
+#===============================================================================
+def updateMean(currentMean,currentCount,newValue):
+   n = float(currentCount)
+   mu = float(currentMean)
+   x_nPlus1 = float(newValue)
+   nPlus1 = n + 1
+   mu_nPlus1 = mu * n / (n + 1) + x_nPlus1 / (n + 1)
+   return mu_nPlus1,nPlus1
+   
+#===============================================================================
+if __name__ == "__main__":
+   #--- set up to handle command line arguments
+   description="Make a scatter plot from stdin.  Input should be three columns [xData,yData,cData] "
+   description +="for cartesian data and [phiData,rData,cData] for polar data"
+   usage = "cat fileName | %prog [optional args]"
+   p = optparse.OptionParser(usage,description=description)
+   p.add_option('-x','--xLimits',action='store',type='string',
+         dest='xlim', metavar="xmin:xmax", help='xlim = phiLim for polar')
+   p.add_option('-y','--yLimits',action='store',type='string',
+         dest='ylim', metavar="ymin:ymax",help="ylim = rlim for polar")
+   p.add_option('--nx',action='store',type='int',
+      dest='nx', metavar="100",default=100, help = 'num x points for interp mode')
+   p.add_option('--ny',action='store',type='int',
+      dest='ny', metavar="100",default=100, help = 'num y points for interp mode')
+   p.add_option('-f','--fileToSave',action='store',type='string',
+                                               dest='fileName', metavar="fileName")
+   p.add_option('-q','--quiet',action='store_true', default=False,
+         dest='quiet', help='Quiet. (For saing without drawing plot)')
+   p.add_option('-s','--boxSize',action='store',type='int',
+         dest='boxSize', metavar="BOXSIZE (default 10)",default='10',
+         help="Box size to draw for each bin.  SET TO NEGATIVE NUMBER FOR INTERP MODE")
+   p.add_option('-c','--colorBarLimits',action='store',type='string',
+         dest='clim', metavar="cmin:cmax",default="")
+   p.add_option('-C','--colorMap',action='store',type='string',
+         dest='colorMap', metavar="colorMapName",default='hires',
+         help='Enter any string to see list of valid colorMaps')
+   p.add_option('-l','--clabel',action='store',type='string',
+                   dest='clabel',help='optional value for colorbar', default='')
+   p.add_option('--xlabel',action='store',type='string',
+         dest='xlabel', metavar="'x label text'",default='')
+   p.add_option('--ylabel',action='store',type='string',
+         dest='ylabel', metavar="'y label text'",default='')
+   p.add_option('--title',action='store',type='string',
+         dest='title', metavar="'title text'",default='')
+   p.add_option('-g','--grid',action='store_true', default=False,
+         dest='grid', help='show grid lines')
+   p.add_option('-k','--commentToken',action='store',type='string',
+         dest='commentToken', metavar="#",default='#')
+   p.add_option('-P','--polar',action='store',type='string', nargs=1,
+                                        dest='polar', metavar="[deg|rad]")
+   p.add_option('--page',action='store',
+                 dest='page',choices=['portrait','landscape','slideFull','slideHalf','slideBumper'],
+        help = "turn on figure formatting. presets are: portrait|landscape|slideFull|slideHalf|slideBumper")
+   p.add_option('--marginTop',action='store', dest='marginTop',type=float,
+                     default=.1,  metavar="0.1",help = "top margin (fig fraction)")
+   p.add_option('--marginBottom',action='store', dest='marginBottom',type=float,
+                    default=.1,metavar="0.1",help = "bottom margin (fig fraction)")
+   
+   p.add_option('--marginLeft',action='store', dest='marginLeft',type=float,
+                    default=.12,metavar="0.12",help = "left margin (fig fraction)")
+   p.add_option('--marginRight',action='store', dest='marginRight',type=float,
+                   default=.08, metavar=".08",help = "right margin (fig fraction)")
+   
+   p.add_option('--sizeTitle',action='store', dest='sizeTitle',type=float,default=18,
+                                             metavar="18",help = "title font size")
+   p.add_option('--sizeLabel',action='store', dest='sizeLabel',type=float,default=16,
+                                             metavar="16",help = "label font size")
+   p.add_option('--sizeNumber',action='store', dest='sizeNumbers',type=float,default=14,
+                                             metavar="14",help = "label font size")
+   p.add_option('--lineWidth',action='store', dest='lineWidth',type=float,default=2,
+                                             metavar="2",help = "label font size")
+   p.add_option('--markerSize',action='store', dest='markerSize',type=float,default=7,
+                                             metavar="7",help = "label font size")
+   
+   p.add_option('--dpi',action='store', dest='dpi',type='int',default=300,
+                                                metavar="300",help = "savefig dpi")
+   
+   
+   #--- parse the input arguments
+   options,arguments=p.parse_args()
+   colorMap = options.colorMap
+   
+   
+   doFormatting = False
+   if not options.page == None:
+      doFormatting = True
+   
+   #--- set any formatting instructions
+   if doFormatting:
+      from matplotlib import rcParams
+      
+      #for p in sorted(rcParams.keys()):
+      #   print p
+      #sys.exit()
+      #
+      rcParams['font.weight'] = 300 # (val = 100 to 900)
+      rcParams['font.size'] = 14 # (val = 100 to 900)
+      
+      
+      rcParams['axes.titlesize'] = options.sizeTitle
+      rcParams['axes.labelsize'] = options.sizeLabel
+      rcParams['axes.linewidth'] = options.lineWidth
+      
+      rcParams['xtick.labelsize'] = options.sizeNumbers
+      rcParams['ytick.labelsize'] = options.sizeNumbers
+      rcParams["xtick.major.size"] = 7
+      rcParams["ytick.major.size"] = 7
+      rcParams['xtick.major.pad'] = 6
+      rcParams['ytick.major.pad'] = 6
+      
+      
+      rcParams['lines.linewidth'] = options.lineWidth #plot lineWidths
+      rcParams['lines.markersize'] = options.markerSize #plot marker sizes
+      
+      if options.page == "portrait":
+         rcParams["figure.figsize"] = [8.5,11] #portrait
+      elif options.page == "slideFull":
+         rcParams["figure.figsize"] = [8.8,5.9] #single power point graph
+         #options.marginLeft = .08
+         #options.marginRight = .03
+         #options.marginTop = .06
+      elif options.page == "slideHalf":
+         rcParams["figure.figsize"] = [4.8,5.7] #one of two side-by-side power point graphs
+         #options.marginLeft = .14
+         #options.marginRight = .04
+         #options.marginTop = .06
+      elif options.page == "slideBumper":
+         rcParams["figure.figsize"] = [8.8,4.9] #single power point graph
+         #options.marginLeft = .08
+         #options.marginRight = .03
+         #options.marginTop = .08
+         #options.marginBottom = .12
+      else:
+         rcParams["figure.figsize"] = [11,8.5] #default to landscape
+      
+      if not options.marginTop == None:
+         rcParams["figure.subplot.top"] = 1 - options.marginTop
+      if not options.marginBottom == None:
+         rcParams["figure.subplot.bottom"] = options.marginBottom
+      if not options.marginLeft == None:
+         rcParams["figure.subplot.left"] = options.marginLeft
+      if not options.marginRight == None:
+         rcParams["figure.subplot.right"] = 1 - options.marginRight
+         
+      
+      
+      rcParams["figure.dpi"] = 80
+      rcParams["savefig.dpi"] = 80
+   
+      
+      
+   
+   
+   
+   
+   
+   
+   #--- determine the cartesian or polar status
+   polarType = options.polar
+   if not polarType in [None,'deg','rad']:
+      msg = "\n\n-P option must specify either 'deg' or 'rad'\n"
+      raise StandardError,msg
+   
+   #--- read in the data
+   data = loadtxt(sys.stdin,comments=options.commentToken)
+   
+   #--- make sure two columns are specified
+   keepOn = False
+   if len(data.shape) == 2:
+      if data.shape[1] == 3:
+         keepOn = True
+   if not keepOn:
+      msg = 'You must specify exactly three columns of data'
+      raise StandardError,msg
+   
+   #--- parse out the xData and the yData
+   xp = data[:,0]
+   yp = data[:,1]
+   zp = data[:,2]
+   
+
+   #--- set default limits
+   xlim = (min(xp),max(xp))
+   ylim = (min(yp),max(yp))
+   
+   #--- set any requested axis limits
+   for limString in ['xlim','ylim']:
+      exec 'lim = options.%s' % limString
+      if not lim == None:
+         exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+         if m:
+            limRange = (float(m.group(1)),float(m.group(2)))
+            exec '%s = limRange' % (limString)
+
+   #--- adjust xp to be correct angle type if polar is defined
+   if polarType == 'deg':
+      xp = pi * xp / 180.
+      xlim = tuple(array(xlim) * pi / 180)
+
+   #--- trim the inputs to the limits
+   useIndex = array([True for nn in xp],dtype='bool')
+   
+   for ui in [xp>=xlim[0], xp<=xlim[1], yp>=ylim[0], yp<=ylim[1] ]:
+      useIndex = logical_and(useIndex,ui)
+   xp = xp[useIndex]   
+   yp = yp[useIndex]   
+   zp = zp[useIndex]   
+
+
+   #--- set up the figure and axes
+   fig = figure()
+   if not polarType == None:
+      ax = fig.add_subplot(111,polar=True)
+   else:
+      ax = fig.add_subplot(111,polar=False)
+
+   #--- make a custom palettes by reversing existing ones
+   colorDictList = [cm.RdBu._segmentdata,cm.gist_rainbow._segmentdata]
+   paletteList = []
+   for colorDict in colorDictList:
+      for color in ['red','green','blue']:
+         _xList = [t[0] for t in colorDict[color]]
+         _y0List = [t[1] for t in colorDict[color]]
+         _y1List = [t[2] for t in colorDict[color]]
+         _y0List.reverse()
+         _y1List.reverse()
+         newTup = tuple(zip(_xList,_y0List,_y1List))
+         colorDict[color] = newTup
+      palette = LinearSegmentedColormap('hilow',colorDict,256)
+      paletteList.append(palette)
+   hilow_palette,hires2palette = tuple(paletteList)
+
+   #--- set the color palette to use for the scatter plot
+   allowedMaps = {'normal': cm.jet,
+                  'cyclic': cm.hsv,
+                  'hires': cm.spectral,
+                  'hires2': hires2palette,
+                  'hilow': hilow_palette,
+                  }
+   if not colorMap in allowedMaps.keys():
+      msg = 'colorMap argument must be in %s' % repr(allowedMaps.keys())
+      raise StandardError, msg
+   palette = allowedMaps[colorMap]
+
+   #--- plot colored points ----------------------------------------------------
+   if options.boxSize > 0:
+      h = scatter(xp,yp,c=zp,s=options.boxSize,marker='s',cmap=palette,linewidth=0)
+
+   #--- plot interplated surface -----------------------------------------------
+   else:
+      
+      #--- create array of x and y edges
+      xEdges = linspace(xlim[0],xlim[1],options.nx+1)
+      yEdges = linspace(ylim[0],ylim[1],options.ny+1)
+      
+      #--- handle special case for polar plots
+      if not polarType == None:
+         edgeRadius = max(ylim)
+         nx = max([options.nx,options.ny])
+         ny = nx
+         xEdges = linspace(-edgeRadius,edgeRadius,nx+1)
+         yEdges = linspace(-edgeRadius,edgeRadius,ny+1)
+         rp = yp
+         pp = xp
+         xp = rp * cos(pp)
+         yp = rp * sin(pp)
+      
+      X,Y = meshgrid(xEdges,yEdges)
+      Z = griddata(xp,yp,zp,X,Y)
+      
+      if polarType == None:
+         h = imshow(Z,origin='lower',extent = (xlim[0],xlim[1],ylim[0],ylim[1]))
+         axis('tight')
+      else:
+         h = ax.imshow(Z,origin='lower',extent = (0,2*pi,0,ylim[1]))
+         axis('scaled')
+
+
+   #--- dress up the plot ------------------------------------------------------
+   #--- set the color limits
+   colorBarLimits = h.get_clim()
+   m = re.match('^(\S+):(\S+)$',options.clim)
+   if m:
+      colorBarLimits = (float(m.group(1)), float(m.group(2)))
+      h.set_clim(colorBarLimits)
+
+   h.set_cmap(palette)
+
+   #--- draw and label the colorbar
+   cb = gcf().colorbar(h,orientation='horizontal')
+   cb.set_label(options.clabel)
+
+   #--- add labels and titles
+   xlabel(options.xlabel)
+   ylabel(options.ylabel)
+   title(options.title)
+
+   #--- set any requested axis limits
+   for limString in ['xlim','ylim']:
+      exec 'lim = options.%s' % limString
+      if not lim == None:
+         exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+         if m:
+            limRange = float(m.group(1)),float(m.group(2))
+            exec 'gca().set_%s(limRange)' % (limString)
+
+   #--- show grid lines if requested
+   if options.grid:
+      grid(True)
+
+   #--- save the file if requested
+   if not options.fileName == None:
+      savefig(options.fileName,dpi=options.dpi)
+   
+   #--- plot if requested
+   if not options.quiet:
+      show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      ##--- set default limits
+      #xlim = (min(xp),max(xp))
+      #ylim = (min(yp),max(yp))
+      #
+      ##--- set any requested axis limits
+      #for limString in ['xlim','ylim']:
+      #   exec 'lim = options.%s' % limString
+      #   if not lim == None:
+      #      exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+      #      if m:
+      #         limRange = (float(m.group(1)),float(m.group(2)))
+      #         exec '%s = limRange' % (limString)
+      #
+      ##--- trim the inputs to the limits
+      #useIndex = array([True for nn in xp],dtype='bool')
+      #
+      #for ui in [xp>=xlim[0], xp<=xlim[1], yp>=ylim[0], yp<=ylim[1] ]:
+      #   useIndex = logical_and(useIndex,ui)
+      #xp = xp[useIndex]   
+      #yp = yp[useIndex]   
+      #zp = zp[useIndex]   
+      #
+      ##--- create array of x and y edges
+      #xEdges = linspace(xlim[0],xlim[1],options.nx+1)
+      #yEdges = linspace(ylim[0],ylim[1],options.ny+1)
+      #dx = xEdges[1] - xEdges[0]
+      #dy = yEdges[1] - yEdges[0]
+      #xCenters = 0.5 * dx + xEdges[:-1]
+      #yCenters = 0.5 * dy + yEdges[:-1]
+      #
+      #xIndex = digitize(xp,xEdges)
+      #yIndex = digitize(yp,yEdges)
+      #xIndex = xIndex[logical_and(xIndex > 0, xIndex<len(xCenters))] - 1
+      #yIndex = yIndex[logical_and(yIndex > 0, yIndex<len(yCenters))] - 1
+      #MU = ndarray((len(yCenters),len(xCenters)))
+      #N = ndarray((len(yCenters),len(xCenters)))
+      #
+      #for nn in range(len(xIndex)):
+      #   MU[yIndex[nn],xIndex[nn]],N[yIndex[nn],xIndex[nn]] = updateMean(
+      #                                                   MU[yIndex[nn],xIndex[nn]],
+      #                                                    N[yIndex[nn],xIndex[nn]],
+      #                                                                      zp[nn])
+      #
+      #h = imshow(MU,origin='lower',extent = (min(xEdges),max(xEdges),
+      #                                             min(yEdges),max(yEdges)))
+      #axis('tight')
+

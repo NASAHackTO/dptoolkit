@@ -1,0 +1,79 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from jinja2 import Environment, FileSystemLoader,Template
+
+#--- set up the option parser
+description = "This script will render a jinja2 template file to stdout "
+description += "using the dictionary info provided in the -d parameter. "
+description += "See documentation at http://jinja.pocoo.org for template syntax."
+usage = "%prog -f templateFile -d 'key1:value1|key2:value2' "
+
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-f','--templateFile',action='store',type='string',
+                                    dest='templateFile',metavar='fileName',
+                                    nargs=1,
+                                    help="fileName of template to render")
+
+p.add_option('-d','--dictString',action='store',type='string',
+                                    dest='dictString',metavar="'key1:val1|key2:val2|...'",
+                                    help="Pipe delimited list of key:val pairs.")
+
+options,arguments = p.parse_args()
+
+#--- make sure inputs are okay
+templateFile = options.templateFile
+dictString = options.dictString
+
+if templateFile == None:
+   p.print_help()
+   sys.stderr.write("\n\nError:\n   You must supply a template file name.\n\n")
+   sys.exit()
+
+if dictString == None:
+   p.print_help()
+   sys.stderr.write("\n\nError:\n   You must supply a dictionary string\n\n")
+   sys.exit()
+
+if not ':' in dictString:
+   p.print_help()
+   sys.stderr.write("\n\nError:\n   dictString must have at least one key:value pair.\n\n")
+   sys.exit()
+
+if not os.path.isfile(templateFile):
+   p.print_help()
+   sys.stderr.write("\n\nError\n   Can't find template file: %s\n\n" % templateFile)
+   sys.exit()
+
+#--- get the template fileName and parent directory
+templateDir = os.path.dirname(templateFile)
+templateFile = os.path.basename(templateFile)
+
+#--- set parent directory to cwd if it is blank string
+if not templateDir:
+   templateDir = '.'
+
+#--- pull out key/value pairs from input string
+keyValList =  options.dictString.split("|")
+
+#-- initialize an empty renduring dictionary
+renderDict = {}
+
+#--- fill the render dictionary with key/value pairs
+for keyVal in keyValList:
+   try:
+      key,val = tuple(keyVal.split(':'))
+   except:
+      raise StandardError,"\n\nProblem with keyVal pair: '%s'" % keyVal
+   key = key.strip()
+   renderDict[key] = val
+
+#--- create a jinja2 template from the specified template file
+env = Environment(loader=FileSystemLoader(templateDir))
+template = env.get_template(templateFile)
+
+#--- render the template with the renderDictionary to stdout
+sys.stdout.write(template.render(renderDict))

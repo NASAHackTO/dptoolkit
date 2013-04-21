@@ -1,0 +1,133 @@
+#! /usr/bin/env ppython
+
+import sys
+import os
+import re
+import optparse
+import string
+
+#===============================================================================
+def sortKeyFunc(x):
+   #--- define a key function for sorting 
+   try:
+      return float(x[0])
+   except:
+      try:
+         return float(x)
+      except:
+         pass
+      return x
+
+
+#===============================================================================
+if __name__ == "__main__":
+   #--- set up to handle command line arguments
+   description="Make a table of columns from p.cat format data provided on stdin"
+   usage = "%prog file1 file2 [file3 file 4... ]"
+   p = optparse.OptionParser(usage,description=description)
+
+   p.add_option('-l','--labelColumn',action='store',type='int', default=0,metavar='0',
+          dest='labelColumn', help='The 0-indexed column containing column labels')
+   p.add_option('-x','--xColumn',action='store',type='int', default=1,metavar='1',
+          dest='xColumn', help='The column containing the x (i.e. common) data')
+   p.add_option('-y','--yColumn',action='store',type='int', default=2,metavar='2',
+          dest='yColumn', help='The column containing the y data for each column')
+   p.add_option('-H','--labelHeader',action='store', nargs=1,type='string',
+          dest='labelHeader', help='Print headers and use this name as header for the label')
+
+   options,arguments=p.parse_args()
+
+   #--- initalize a dictionary to hold column information
+   columnDict = {}
+   widthDict = {}
+
+   #--- get the specified columns to use
+   labelCol,xCol,yCol = options.labelColumn,options.xColumn,options.yColumn
+
+   #--- loop over input lines to fill columnDict
+   for line in sys.stdin:
+      words = line.split()
+      #---ignore empty lines
+      if words:
+         #--- pull out data
+         labelKey,xVal,yVal = words[labelCol],words[xCol],words[yCol]
+         #--- add this data to the appropriate column
+         try:
+            columnDict[labelKey].append((xVal,yVal))
+         except:
+            columnDict[labelKey] = [(xVal,yVal)]
+
+         #--- update the width of this column
+         try:
+            widthDict[labelKey] = max([len(yVal),widthDict[labelKey]])
+         except:
+            widthDict[labelKey] = len(yVal) 
+
+         #--- make sure the column is wide enough for the label
+         try:
+            labelWidth = max([len(labelKey),labelWidth,len(xVal)])
+         except:
+            labelWidth = max([len(labelKey),len(xVal)])
+
+
+
+
+   #--- make sure each column has the same number of points
+   colLength = None
+   colKeyList = sorted(columnDict.keys(),key=sortKeyFunc)
+   for key in colKeyList:
+      columnDict[key].sort(key=sortKeyFunc)
+      if colLength == None:
+         colLength = len(columnDict[key])
+      if not len(columnDict[key]) == colLength:
+         msg = "\n\nError in p.catToTable.  At least one columne of different length found\n\n"
+         sys.stderr.write(msg)
+         sys.exit(1)
+
+   
+   #--- initialize some string for constructing the header
+   headerString = ""
+   lineString = "#"
+   space = " "*3
+   spaceLength = len(space)
+   
+   #--- if a header was requested
+   if not options.labelHeader == None:
+      #--- adjust the label width given the name provided by the suer
+      headerString = "#"
+      labelWidth = max([labelWidth,len(options.labelHeader)])
+
+      #---make sure columns widths are big enough for headers
+      for labelKey in colKeyList:
+         try:
+            widthDict[labelKey] = max([len(labelKey),widthDict[labelKey]])
+         except:
+            widthDict[labelKey] = len(labelKey) 
+      
+      #--- assemble the header
+      headerString += (options.labelHeader.ljust(labelWidth+spaceLength))
+      lineString += "-"*(labelWidth) + space
+      for key in colKeyList:
+         headerString += key.ljust(widthDict[key]+spaceLength)
+         lineString += "-"*widthDict[key] + space
+      
+
+
+   #--- find the number of rows in the table
+   nRows = len(columnDict[columnDict.keys()[0]])
+
+   #--- loop over all rows in the table
+   for nr in range(nRows):
+      #--- if first row, and header string is defined, print it
+      if nr == 0:
+         if headerString:
+            print headerString
+            print lineString
+
+      #--- assemble a list for this row and print it
+      outList = [columnDict[colKeyList[0]][nr][0].ljust(labelWidth+spaceLength)   ] + [columnDict[key][nr][1].ljust(widthDict[key]+spaceLength-1) for key in colKeyList]
+      print string.join(outList) 
+
+
+
+

@@ -1,0 +1,87 @@
+#! /usr/bin/env ppython
+
+import sys
+import os
+import re
+from numpy import loadtxt
+import subprocess
+#import pylab as pl
+import optparse
+
+
+#--- set up to handle command line arguments
+description="cat files together prepending an integer corresponding to each file"
+usage = "%prog file1 file2 [file3 file 4... ]"
+p = optparse.OptionParser(usage,description=description)
+
+p.add_option('-f','--fromFileList',action='store_true', default=False,
+      dest='useFiles', help='take input from files')
+
+p.add_option('-l','--lineNumbers',action='store_true', default=False,
+      dest='lineNumbers', help='also prepend line numbers')
+
+p.add_option('-s','--stripComments',action='store_true', default=False,
+      dest='stripComments', help='strip comments before catting files')
+
+options,arguments=p.parse_args()
+
+if options.stripComments:
+   stripCommand = " | p.strip "
+else:
+   stripCommand = ""
+
+
+#--- if files were specified
+if options.useFiles:
+   fileNameList = arguments
+   lineList = []
+   counter = 1
+   for fileName in fileNameList:
+      if options.lineNumbers:
+         cmd = "cat %s %s| awk 'BEGIN{ii=0;}{ii+=1; print %d,ii,$0}'" % (fileName,stripCommand,counter)
+      else:
+         cmd = "cat %s %s | awk '{print %d,$0}'" % (fileName,stripCommand,counter)
+  
+      p = subprocess.Popen(['bash','-c',cmd],shell=False)
+      p.wait()
+      counter += 1
+
+#--- otherwise
+else:
+   #--- initialize outputs
+   yVector = []
+   xVector = []
+   indexVector = []
+   prefixVector = []
+   
+   #--- read the data from stdin
+   data = loadtxt(sys.stdin)
+   
+   #--- cat a single column of data
+   if len(data.shape) == 1:
+      yVector.extend(data.tolist())
+      indexVector.extend(range(1,len(data)+1))
+      prefixVector.extend([1 for dd in range(len(data))])
+   #--- cat multiple columns
+   else:
+      nCols = data.shape[1]
+      for nc in range(1,nCols):
+         xVector.extend(data[:,0].tolist())
+         yVector.extend(data[:,nc].tolist())
+         indexVector.extend(range(1,len(data)+1))
+         prefixVector.extend([nc for dd in range(len(data[:,nc]))])
+         
+   try:
+      #--- output the results with line numbers if requested
+      if options.lineNumbers:
+         for prefix,index,x,y in zip(prefixVector,indexVector,xVector,yVector):
+            print prefix,index,x,y
+      #--- otherwise output results without line numbers
+      else:
+         for prefix,x,y in zip(prefixVector,xVector,yVector):
+            print prefix,x,y
+   except IOError:
+      sys.exit()
+
+
+   

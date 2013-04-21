@@ -1,0 +1,85 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import optparse
+
+#--- set up the option parser
+description = "Find min/max of a specified column of data from stdin. In case"
+usage = "%prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+choices = ['min','max']
+
+p.add_option('-c','--col',action='store',type='int',
+                                    dest='col',metavar='0',default=0,
+                                    help="Col to search for min/max")
+p.add_option('-m','--min',action='store_true',help="Search for min",dest="min")
+p.add_option('-M','--max',action='store_true',help="Search for man",dest="max")
+p.add_option('-v','--verbose',action='store_true',
+                                    dest='verbose',
+                            help="print entire line on which min/max was found")
+
+options,arguments = p.parse_args()
+
+col = options.col
+
+minVal,maxVal = None,None
+minLineList,maxLineList = [],[]
+for line in sys.stdin:
+   words = line.split()
+   if len(words) > col:
+      #---get the current value
+      val = float(words[col])
+      #--- if the val equals the current limit append to the limit lists
+      if val == minVal:
+         minLineList.append(line)
+      if val == maxVal:
+         maxLineList.append(line)
+         
+      #--- if new limit found, record it and reset the limit lists
+      if (val < minVal) or (minVal == None):
+         minVal = val
+         minLineList = [line]
+      if (val > maxVal) or (maxVal == None):
+         maxVal = val
+         maxLineList = [line]
+         
+labelOutput = False
+if options.min and options.max:
+   labelOutput = True
+
+#--- if verbose option requested
+if options.verbose:
+   #--- if looking for max
+   if options.max:
+      #--- loop over all max lines found and print them with(out) labels
+      for line in maxLineList:
+         if labelOutput:
+            print '_max_  ',line.strip()
+         else:
+            print line.strip()
+   #--- if looking for min
+   if options.min:
+      #--- loop over all min lines found and print them with(out) labels
+      for line in minLineList:
+         if labelOutput:
+            print '_min_  ',line.strip()
+         else:
+            print line.strip()
+#--- non verbose output   
+else:
+   #--- if looking for max
+   if options.max:
+      if labelOutput:
+         print '_max_  ',maxVal
+      else:
+         print maxVal
+   if options.min:
+      if labelOutput:
+         print '_min_  ',minVal
+      else:
+         print minVal
+   
+      
+
+

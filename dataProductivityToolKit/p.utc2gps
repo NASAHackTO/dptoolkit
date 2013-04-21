@@ -1,0 +1,126 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from math import floor
+import datetime
+import string
+
+#--- create a list of datetime objects and offset that begin at that time
+#    This is a list of tuples.  The first element of each tuple is the first
+#    moment in time at which the offset contained in the second element is
+#    valid.  The offsets are GPS - UTC
+offsetList = sorted([
+                        (datetime.datetime(1972,1,1,0,0,0),-9),
+                        (datetime.datetime(1972,7,1,0,0,0),-8),
+                        (datetime.datetime(1973,1,1,0,0,0),-7),
+                        (datetime.datetime(1974,1,1,0,0,0),-6),
+                        (datetime.datetime(1975,1,1,0,0,0),-5),
+                        (datetime.datetime(1976,1,1,0,0,0),-4),
+                        (datetime.datetime(1977,1,1,0,0,0),-3),
+                        (datetime.datetime(1978,1,1,0,0,0),-2),
+                        (datetime.datetime(1979,1,1,0,0,0),-1),
+                        (datetime.datetime(1980,1,1,0,0,0),0),
+                        (datetime.datetime(1981,7,1,0,0,0),1),
+                        (datetime.datetime(1982,7,1,0,0,0),2),
+                        (datetime.datetime(1983,7,1,0,0,0),3),
+                        (datetime.datetime(1985,7,1,0,0,0),4),
+                        (datetime.datetime(1988,1,1,0,0,0),5),
+                        (datetime.datetime(1990,1,1,0,0,0),6),
+                        (datetime.datetime(1991,1,1,0,0,0),7),
+                        (datetime.datetime(1992,7,1,0,0,0),8),
+                        (datetime.datetime(1993,7,1,0,0,0),9),
+                        (datetime.datetime(1994,7,1,0,0,0),10),
+                        (datetime.datetime(1996,1,1,0,0,0),11),
+                        (datetime.datetime(1997,7,1,0,0,0),12),
+                        (datetime.datetime(1999,1,1,0,0,0),13),
+                        (datetime.datetime(2006,1,1,0,0,0),14),
+                        (datetime.datetime(2009,1,1,0,0,0),15),
+                      ])
+
+#--- reverse sort the list so that more current times appear first
+offsetList.reverse()
+
+#--- create the same list, but expressed in gps time
+offsetList_gps = [(t[0]+datetime.timedelta(seconds=t[1]),t[1]) for t in offsetList]
+
+#--- define the J2000 epoch
+J2000 = datetime.datetime(2000,1,1,12)
+
+
+
+#===============================================================================
+def gpsFromJ2000UTC(inSecond,invert=False):
+   
+   #--- if you want to convert to GPS from UTC
+   if not invert:
+      #--- comput the datetimeObj for the input
+      dateTimeObj = J2000 + datetime.timedelta(seconds=inSecond)
+
+      #--- find the latest offset value in the inverse-time ordered list
+      for offsetTuple in offsetList:
+         if dateTimeObj >= offsetTuple[0]:
+            return inSecond + offsetTuple[1]
+         
+   #--- if you want the opposite, i.e. to UTC from GPS
+   else:
+      #--- comput the datetimeObj for the input
+      dateTimeObj = J2000 + datetime.timedelta(seconds=inSecond)
+
+      #--- find the latest offset value in the inverse-time ordered list
+      for offsetTuple in offsetList_gps:
+         if dateTimeObj >= offsetTuple[0]:
+            return inSecond - offsetTuple[1]
+
+#===============================================================================
+if __name__ == "__main__":
+   
+   
+   #--- set up the option parser
+   description = "Convert a column between utc and gps seconds from the J2000 "
+   description += "epoch.  Only the specified columns will be converted.  The "
+   description += "remaining columns will remain untouched."
+   
+
+
+   usage = "cat file.txt | p.[utc/gps]2[gps/utc] [options args]"
+   p = optparse.OptionParser(description=description, usage = usage)
+   p.add_option('-c','--colList',action='store',type='string',dest='colString',
+         default='0',metavar="'0'", help="Colon delimited list of columns"+
+                              " to convert.  (Col numbering like python lists)")
+   p.add_option('-v','--invert',action='store_true', default=False,
+         dest='invert', help='Invert the conversion.')
+   
+   
+   options,arguments = p.parse_args()
+   
+   invert = options.invert
+   
+   #--- get the list of columns to process
+   colList = [int(s) for s in options.colString.split(":")]
+   
+      
+   #--- loop over all lines in stdin
+   for line in sys.stdin:
+      #--- start try block for making sure that broken pipes exit nicely
+      try:
+         #--- split the line into words
+         words = line.split()
+         #--- loop over each word (aka column)
+         for col,word in enumerate(words):
+            #--- if this column should be converted
+            if col in colList:
+               #--- compute the gps time for this col and print it to stdout
+               inSeconds = float(word)
+               sys.stdout.write("%0.15g   " % gpsFromJ2000UTC(inSeconds,invert))
+            #--- if this column not to be converted, leave it alone
+            else:
+               sys.stdout.write(word+'   ')
+         sys.stdout.write('\n')      
+         sys.stdout.flush()
+      #--- exit quietly if IOError (because it's probably a broken pipe)
+      except IOError:
+         sys.exit()
+   
+

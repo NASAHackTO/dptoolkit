@@ -1,0 +1,253 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import string
+import optparse
+import re
+from numpy import array,nonzero,loadtxt,linspace,histogram,diff
+from numpy import median,std,mean
+from pylab import bar, gca,gcf,plot,xlabel,ylabel,title,grid,show,legend
+
+#--- set up for tex ability
+from matplotlib import rc
+#rc('text',usetex=True)
+
+
+
+#===============================================================================
+def plotHist(x,nBins=100,limits=None,color='b',linewidth=1,createPlot=True,showStats=True,normalized=False):
+   #import pylab as pl
+   #import killNaNs
+   #
+   #x = killNaNs.killNaNs(x)
+   #x = array(x)
+   
+   if not limits == None:
+      goodPoints = nonzero(x>min(limits))[0]
+      x = x[goodPoints]
+      goodPoints = nonzero(x<max(limits))[0]
+      x = x[goodPoints]
+      
+   
+   
+   if limits==None:
+      edges = linspace(min(x),max(x),nBins+1)
+   else:
+      edges = linspace(limits[0],limits[1],nBins+1)
+   counts,edges = histogram(x,bins=edges)
+   if normalized:
+      counts = counts/float(sum(counts))
+   binWidth = median(diff(edges))
+   centers = (edges[:-1]+ .5*binWidth)
+   
+   sigma = std(x)
+   meanVal = mean(x)
+   res = x - meanVal
+
+   if createPlot:
+      bar(edges[:-1],counts,binWidth,color=color,linewidth=linewidth)
+      yLimits = gca().get_ylim()
+      if showStats:
+         plot([meanVal, meanVal],[yLimits[0],yLimits[1]],'r-',label='mean = %g'%meanVal)
+         plot([meanVal-sigma, meanVal-sigma],[yLimits[0],yLimits[1]],'g-')
+         plot([meanVal+sigma, meanVal+sigma],[yLimits[0],yLimits[1]],'g-', label=r'sigma = %g'%(sigma))
+         legend(loc="best")
+      if not limits == None:
+         gca().set_xlim(*limits)
+   return (centers,counts)
+
+#===============================================================================
+if __name__ == "__main__":
+   
+   
+   
+   #--- set up to handle command line arguments
+   description="Plot the Histogram"
+   usage = "cat singleColFile | %prog [OPTIONS]"
+
+   p = optparse.OptionParser(usage,description=description)
+
+   p.add_option('-n','--nBins',action='store',type='int',dest='nBins',
+       default = 100, help='The number of bins to use in histogram (default: 10')
+   p.add_option('-l','--limits',action='store',type='string',
+         dest='limits', metavar="min:max",default="")
+   p.add_option('-N','--norm',action='store_true', default=False,
+                              dest='normalized', help='normalize to total count')
+   p.add_option('-u','--supressStats',action='store_true', default=False,
+         dest='supressStats', help='supress display of mean/sigma')
+   p.add_option('--xlog',action='store_true', default=False,
+         dest='xlog', help='make x a log scale')
+   p.add_option('--ylog',action='store_true', default=False,
+         dest='ylog', help='make y a log scale')
+   p.add_option('--xlabel',action='store',type='string',
+         dest='xlabel', metavar="'x label text'",default='Values')
+   p.add_option('--ylabel',action='store',type='string',
+         dest='ylabel', metavar="'y label text'",default='Counts')
+   p.add_option('--title',action='store',type='string',
+         dest='title', metavar="'title text'",default='')
+
+
+   p.add_option('-s','--save',action='store',type='string',
+                                            dest='fileName', metavar="fileName")
+
+   p.add_option('-q','--quiet',action='store_true', default=False,
+                   dest='quiet', help='Quiet. (For saing without drawing plot)')
+
+   p.add_option('-c','--color',action='store',type='string',dest='color',
+                 default='b', help='The color to use for the bins (default: b)')
+   p.add_option('-w','--lineWidth',action='store',type='int',
+      default=1, dest='lineWidth',help="The linewidth of the bins (default: 1)")
+   p.add_option('-g','--grid',action='store_true', default=False,
+         dest='grid', help='show grid lines')
+   p.add_option('-o','--output',action='store_true', default=False,
+         dest='output', help='print results to console instead of making plot')
+   p.add_option('--page',action='store',
+                 dest='page',choices=['portrait','landscape','slideFull','slideHalf','slideBumper'],
+     help = "turn on figure formatting. presets are: portrait|landscape|slideFull|slideHalf|slideBumper")
+   p.add_option('--marginTop',action='store', dest='marginTop',type=float,
+                     default=.1,  metavar="0.1",help = "top margin (fig fraction)")
+   p.add_option('--marginBottom',action='store', dest='marginBottom',type=float,
+                    default=.1,metavar="0.1",help = "bottom margin (fig fraction)")
+   
+   p.add_option('--marginLeft',action='store', dest='marginLeft',type=float,
+                    default=.12,metavar="0.12",help = "left margin (fig fraction)")
+   p.add_option('--marginRight',action='store', dest='marginRight',type=float,
+                   default=.08, metavar=".08",help = "right margin (fig fraction)")
+   
+   p.add_option('--sizeTitle',action='store', dest='sizeTitle',type=float,default=18,
+                                             metavar="18",help = "title font size")
+   p.add_option('--sizeLabel',action='store', dest='sizeLabel',type=float,default=16,
+                                             metavar="16",help = "label font size")
+   p.add_option('--sizeNumber',action='store', dest='sizeNumbers',type=float,default=14,
+                                             metavar="14",help = "label font size")
+   p.add_option('--lineWidthEdge',action='store', dest='lineWidthEdge',type=float,default=2,
+                                             metavar="2",help = "label font size")
+   p.add_option('--markerSize',action='store', dest='markerSize',type=float,default=7,
+                                             metavar="7",help = "label font size")
+
+
+
+   options,arguments=p.parse_args()
+   
+   doFormatting = False
+   if not options.page == None:
+      doFormatting = True
+
+   #--- set any formatting instructions
+   if doFormatting:
+      from matplotlib import rcParams
+      
+      options.lineWidth = 1
+      
+      #for p in sorted(rcParams.keys()):
+      #   print p
+      #sys.exit()
+      #
+      rcParams['font.weight'] = 300 # (val = 100 to 900)
+      rcParams['font.size'] = 14 # (val = 100 to 900)
+      
+      
+      rcParams['axes.titlesize'] = options.sizeTitle
+      rcParams['axes.labelsize'] = options.sizeLabel
+      rcParams['axes.linewidth'] = options.lineWidthEdge
+      
+      rcParams['xtick.labelsize'] = options.sizeNumbers
+      rcParams['ytick.labelsize'] = options.sizeNumbers
+      rcParams["xtick.major.size"] = 7
+      rcParams["ytick.major.size"] = 7
+      rcParams['xtick.major.pad'] = 6
+      rcParams['ytick.major.pad'] = 6
+      
+      
+      rcParams['lines.linewidth'] = options.lineWidth #plot lineWidths
+      rcParams['lines.markersize'] = options.markerSize #plot marker sizes
+      
+      if options.page == "portrait":
+         rcParams["figure.figsize"] = [8.5,11] #portrait
+      elif options.page == "slideFull":
+         rcParams["figure.figsize"] = [8.8,5.9] #single power point graph
+         #options.marginLeft = .08
+         #options.marginRight = .03
+         #options.marginTop = .06
+      elif options.page == "slideHalf":
+         rcParams["figure.figsize"] = [4.8,5.7] #one of two side-by-side power point graphs
+         #options.marginLeft = .14
+         #options.marginRight = .04
+         #options.marginTop = .06
+      elif options.page == "slideBumper":
+         rcParams["figure.figsize"] = [8.8,4.9] #single power point graph
+         #options.marginLeft = .08
+         #options.marginRight = .03
+         #options.marginTop = .08
+         #options.marginBottom = .12
+      else:
+         rcParams["figure.figsize"] = [11,8.5] #default to landscape
+      
+      if not options.marginTop == None:
+         rcParams["figure.subplot.top"] = 1 - options.marginTop
+      if not options.marginBottom == None:
+         rcParams["figure.subplot.bottom"] = options.marginBottom
+      if not options.marginLeft == None:
+         rcParams["figure.subplot.left"] = options.marginLeft
+      if not options.marginRight == None:
+         rcParams["figure.subplot.right"] = 1 - options.marginRight
+         
+      
+      
+      rcParams["figure.dpi"] = 80
+      rcParams["savefig.dpi"] = 80
+
+   
+   
+
+   #--- get the data from stdin
+   x = loadtxt(sys.stdin)
+   
+   #--- get the remaining arguments
+   minVal,maxVal = min(x)-1e-12,max(x)+1e-12
+   m = re.match('^(\S+):(\S+)$',options.limits)
+   if m:
+      minVal, maxVal = float(m.group(1)), float(m.group(2))
+      
+   color = options.color
+   lineWidth = options.lineWidth
+   nBins = options.nBins
+   limits = (minVal,maxVal)
+   createPlot = not options.output
+   showStats = not options.supressStats
+   normalized = options.normalized
+   outTup = plotHist(x,nBins=nBins,limits=limits,color=color,linewidth=lineWidth,
+                createPlot=createPlot,showStats=showStats,normalized=normalized)
+   
+   if options.output:
+      centers = outTup[0]
+      counts = outTup[1]
+
+      for center,count in zip(centers,counts):
+         print "%-20f %0.15g" % (center,count)
+      sys.exit()
+      
+
+   #--- add labels and titles
+   xlabel(options.xlabel)
+   ylabel(options.ylabel)
+   title(options.title)
+   
+   #--- set any requested log scaling
+   if options.xlog:
+      gca().set_xscale('log')
+   if options.ylog:
+      gca().set_yscale('log')
+   
+   #--- show grid lines if requested
+   if options.grid:
+      grid(True)
+
+   #--- save the file if requested
+   if not options.fileName == None:
+      gcf().savefig(options.fileName)
+
+   #--- draw plot if requested
+   if not options.quiet:
+      show()

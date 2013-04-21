@@ -1,0 +1,42 @@
+#! /usr/bin/env ppython
+
+import sys
+import string
+import optparse
+import os
+
+#--- set up to handle command line arguments
+description="Makes a web page with links specified files. Prints html to stdout."
+usage = "%prog htmlFile1, htmlFile2,... htmlFileN"
+p = optparse.OptionParser(usage,description=description)
+
+
+#--- parse the input arguments
+options,arguments=p.parse_args()
+
+
+#---get the current working directory
+pwd = os.path.realpath(os.getcwd())
+
+#--- specify the urlBase
+urlBase = "http://sideshow.jpl.nasa.gov"
+
+labelList = arguments
+fileList = [os.path.join(pwd,f) for f in arguments]
+urlList = [s.split("sideshow/web/")[1] for s in fileList]
+urlList = [os.path.join(urlBase,u) for u in urlList]
+
+contentList = ['<a href="%s" target="_blank">%s</a><br/>'%tup for tup in zip(urlList,labelList)]
+contentString = string.join(contentList,"\n")
+
+outString = \
+"""
+<!DOCTYPE HTML>
+<html>
+%s
+</html>
+""" % contentString
+
+print outString
+
+  

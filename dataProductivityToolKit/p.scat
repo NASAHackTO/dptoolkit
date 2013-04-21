@@ -1,0 +1,209 @@
+#! /usr/bin/env ppython
+
+import sys
+import re
+from pylab import scatter,legend,xlabel,ylabel,title,gca,grid,show,cm,gcf,imshow
+from numpy import loadtxt, histogram2d
+import optparse
+
+
+#--- set up to handle command line arguments
+description="Make a scatter plot from stdin.  Input should be two columns [xData, yData]"
+usage = "cat fileName | %prog [optional args]"
+p = optparse.OptionParser(usage,description=description)
+p.add_option('-x','--xLimits',action='store',type='string',
+      dest='xlim', metavar="xmin:xmax")
+p.add_option('-y','--yLimits',action='store',type='string',
+      dest='ylim', metavar="ymin:ymax")
+p.add_option('-m','--nxBins',action='store',type='int',dest='nxBins',
+    default = 30, help='The number of x bins to use in histogram (default: 30')
+p.add_option('-n','--nyBins',action='store',type='int',dest='nyBins',
+    default = 30, help='The number of y bins to use in histogram (default: 30')
+p.add_option('-t','--threhold',action='store',type='float',dest='threshold',
+    default = 0, help='Only bins with count > threshold (default=0) will be drawn')
+p.add_option('-c','--colorBarLimits',action='store',type='string',
+      dest='clim', metavar="cmin:cmax",default="")
+p.add_option('-l','--colorBarLabel',action='store',type='string',
+                dest='clabel',help='optional value for colorbar', default='')
+p.add_option('-s','--boxSize',action='store',type='string',
+      dest='boxSize', metavar="BOXSIZE (default 10)",default='10', help="Box size to draw for each bin")
+p.add_option('--xlabel',action='store',type='string',
+      dest='xlabel', metavar="'x label text'",default='')
+p.add_option('--ylabel',action='store',type='string',
+      dest='ylabel', metavar="'y label text'",default='')
+p.add_option('--title',action='store',type='string',
+      dest='title', metavar="'title text'",default='')
+p.add_option('-g','--grid',action='store_true', default=False,
+      dest='grid', help='show grid lines')
+p.add_option('-k','--commentToken',action='store',type='string',
+      dest='commentToken', metavar="#",default='#')
+
+#--- parse the input arguments
+options,arguments=p.parse_args()
+
+#--- read in the data
+data = loadtxt(sys.stdin,comments=options.commentToken)
+
+#--- make sure two columns are specified
+if len(data.shape) != 2:
+   msg = 'You must specify exactly two columns of data'
+   raise StandardError,msg
+
+#--- parse out the xData and the yData
+xData = data[:,0]
+yData = data[:,1]
+
+
+##--- crop data to limits
+#xLimRange = [min(xData), max(xData)]
+#yLimRange = [min(yData), max(yData)]
+#for index,limString in enumerate(['xlim','ylim']):
+#   exec 'lim = options.%s' % limString
+#   if not lim == None:
+#      exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+#      if m:
+#         exec '%sLimRange = float(m.group(1)),float(m.group(2))' % limString[0]
+#
+#limRange = [xLimRange,yLimRange]
+#H, xedges, yedges = histogram2d(xData, yData, bins=(options.nxBins, options.nyBins),range=limRange)
+
+
+H, xedges, yedges = histogram2d(xData, yData, bins=(options.nxBins, options.nyBins))
+
+
+dx=xedges[1]-xedges[0]
+dy=yedges[1]-yedges[0]
+
+xCenters = xedges[:-1] + dx/2.
+yCenters = yedges[:-1] + dy/2.
+
+
+#rexBox = re.compile('(s|\d*$)')
+#mBox = rexBox.match(options.boxSize);
+#
+#if not mBox:
+#   msg = 'The boxSize parameter must be either a positive integeror the letter s'
+#   raise StandardError, msg
+#
+#
+#if options.boxSize == 's':
+#   extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+#   h = imshow(H, aspect='auto', extent=extent)
+#   #show()
+#   #sys.exit()
+#   
+#   
+#else:
+xp = []
+yp = []
+zp = []
+
+for nx in range(H.shape[0]):
+   for ny in range(H.shape[1]):
+      zCount = H[nx,ny]
+      if zCount > options.threshold:
+         xp.append(xCenters[nx])
+         yp.append(yCenters[ny])
+         zp.append(zCount)
+      
+palette = cm.jet
+h = scatter(xp,yp,c=zp,s=int(options.boxSize),marker='s',cmap=palette,linewidth=0)
+
+
+#--- set the color limits
+colorBarLimits = h.get_clim()
+m = re.match('^(\S+):(\S+)$',options.clim)
+if m:
+   colorBarLimits = (float(m.group(1)), float(m.group(2)))
+   h.set_clim(colorBarLimits)
+
+
+#--- draw and label the colorbar
+#cb = gcf().colorbar(h,orientation='horizontal',aspect = 90,shrink=.8)
+cb = gcf().colorbar(h,orientation='horizontal')
+cb.set_label(options.clabel)
+
+
+
+#--- add labels and titles
+xlabel(options.xlabel)
+ylabel(options.ylabel)
+title(options.title)
+
+#--- set any requested axis limits
+for limString in ['xlim','ylim']:
+   exec 'lim = options.%s' % limString
+   if not lim == None:
+      exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+      if m:
+         limRange = float(m.group(1)),float(m.group(2))
+         exec 'gca().set_%s(limRange)' % (limString)
+
+#--- show grid lines if requested
+if options.grid:
+   grid(True)
+
+
+#--- draw the map
+show()
+
+##--- plot multiple columns
+#else:
+#   #--- if three columns of data assume cols are dataSetID,x,y
+#   if data.shape[1] == 3:
+#      setNumbers = data[:,0]
+#      xAll = data[:,1]
+#      yAll = data[:,2]
+#      dataSetList = list(set(setNumbers))
+#      #--- get any specified legends
+#      legendList = options.legend.split('|')
+#      
+#      for dataSetNum in dataSetList:
+#         useIndex = setNumbers == dataSetNum
+#         x = xAll[useIndex]
+#         y = yAll[useIndex]
+#         label = str(int(dataSetNum))
+#         if legendList:
+#            if dataSetNum <= len(legendList):
+#               newLabel = legendList[int(dataSetNum)-1]
+#               if newLabel:
+#                  label = newLabel
+#         plot(x,y,'.-',label=label)
+#      legend(loc='best')
+#         
+#   #--- if there is an even number of columns
+#   if data.shape[1] % 2 == 0:
+#      for nc in range(0,data.shape[1],2):
+#         if data.shape[1] < 3:
+#            plot(data[:,nc],data[:,nc+1],options.plotSpec)
+#         else:
+#            plot(data[:,nc],data[:,nc+1], '.-')
+#            
+#
+##--- add labels and titles
+#xlabel(options.xlabel)
+#ylabel(options.ylabel)
+#title(options.title)
+#
+##--- set any requested log scaling
+#if options.xlog:
+#   gca().set_xscale('log')
+#if options.ylog:
+#   gca().set_yscale('log')
+#
+##--- set any requested axis limits
+#for limString in ['xlim','ylim']:
+#   exec 'lim = options.%s' % limString
+#   if not lim == None:
+#      exec "m = re.match('^(\S+):(\S+)$',options.%s)" % limString
+#      if m:
+#         limRange = float(m.group(1)),float(m.group(2))
+#         exec 'gca().set_%s(limRange)' % (limString)
+#
+##--- show grid lines if requested
+#if options.grid:
+#   grid(True)
+#
+#
+#show()
+#

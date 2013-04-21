@@ -1,0 +1,43 @@
+#! /usr/bin/env ppython
+
+import optparse
+import sys
+from numpy.random import rand, randn
+from numpy import savetxt
+
+distList = [
+           'uniform',
+           'normal',
+           ]
+
+#--- set up to handle command line arguments
+description="Generate random numbers. Recognized distributions: "+repr(distList)
+usage = "%prog [OPTIONS]"
+
+
+p = optparse.OptionParser(usage,description=description)
+
+p.add_option('-n','--nPoints',action='store',type='int',dest='nPoints',
+    default = 10, help='The number of bins to use in histogram (default: 10')
+p.add_option('-t','--typeOfDistribution',action='store',type='string',
+      dest='distribution', metavar='uniform',default='uniform')
+p.add_option('-d','--dimensionality',action='store',type='int',
+      dest='dimension', metavar='1',default=1)
+
+
+options,arguments=p.parse_args()
+
+try:
+   
+   if options.distribution == "uniform":
+      savetxt(sys.stdout,rand(options.nPoints,options.dimension),fmt="%0.16g")
+   elif options.distribution == "normal":
+      savetxt(sys.stdout,randn(options.nPoints,options.dimension),fmt="%0.16g")
+   else:
+      msg = '\n\nDistribution "%s" not recognized."\nValid Distributions = %s\n\n' %(
+         options.distribution,distList
+      )
+      raise StandardError,msg
+   
+except IOError:
+   pass

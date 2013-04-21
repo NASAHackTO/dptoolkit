@@ -1,0 +1,32 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+
+
+#--- determine if the -v flag was specified
+vFound = '-v' in sys.argv
+
+#--- make default command list by removing the -v flag if it was found 
+argListToPass = [a for a in sys.argv[1:] if not a=='-v']
+
+
+#--- do the normal thing (convert gps to utc)
+if not vFound:
+   argListToPass.append('-v')
+#--- if do inverse, (convert utc to gps)
+else:
+   pass #no need for the -v flag
+
+#--- insert the proper executable at the beginning of the argList
+argListToPass.insert(0,'p.utc2gps')
+
+#print argListToPass
+#sys.exit()
+
+#--- replace this process with the real code
+os.execvp(argListToPass[0],argListToPass)
+   
+
+
+

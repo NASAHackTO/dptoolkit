@@ -1,0 +1,55 @@
+#! /usr/bin/env ppython
+
+import os
+import sys
+import optparse
+from numpy import loadtxt,savetxt
+from scipy.signal import medfilt
+
+description = "Do median filtering on specified columns"
+usage = "cat data.txt %prog [options args]"
+p = optparse.OptionParser(description=description, usage = usage)
+
+p.add_option('-c','--colList',action='store',type='string',
+                                    dest='colListString',metavar='colList',default="0",
+                                    help="Colon delimited col list to filter."+
+                                          " (Col numbering like python lists)")
+p.add_option('-r','--windowRadius',action='store',type='int',nargs=1,
+                                 dest='windowRadius',metavar='windowRadius',
+                                 help = "The number of points before and after "\
+                                    +"a given point to include in the median")
+options,arguments = p.parse_args()
+
+
+#--- get the string that describes which cols to use as the key
+colListString = options.colListString
+
+radius = options.windowRadius
+if radius == None:
+   raise StandardError,"\n\nYou must supply a window radius with the -r option\n\n"
+
+#--- parse the keyColString into a list of columns
+colList = [int(s) for s in colListString.split(":")]
+
+#--- read the data from stdin
+data = loadtxt(sys.stdin)
+
+
+
+#--- loop over the input columns
+if len(data.shape) == 1:
+   data = medfilt(data,kernel_size=2*radius+1)
+   for padPoint in range(radius):
+      data[padPoint] = data[radius-1]
+      data[-padPoint-1] = data[-radius-1]
+else:
+   for col in colList:
+      data[:,col] = medfilt(data[:,col],kernel_size=2*radius+1)
+      for padPoint in range(radius):
+         data[padPoint,col] = data[radius-1,col]
+         data[-padPoint-1,col] = data[-radius-1,col]
+   
+
+savetxt(sys.stdout,data,fmt='%0.15g',delimiter='   ')
+
+

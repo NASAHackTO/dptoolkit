@@ -1,0 +1,43 @@
+#! /usr/bin/env ppython
+import os
+import sys
+import optparse
+from numpy import loadtxt,savetxt,column_stack,array
+from scipy.stats.mstats import mquantiles
+
+
+
+
+if __name__ == "__main__":
+   
+   #--- set up to handle command line arguments
+   description="Compute the quantiles for data on stdin"
+   usage = "cat singleColFile | %prog [OPTIONS]"
+
+   p = optparse.OptionParser(usage,description=description)
+
+   p.add_option('-c','--column',action='store', type='int',  default=0,
+          dest='column', help='Zero-index column for which to calc percentiles')
+   p.add_option('-q','--quantileList',action='store', type='string',
+                                      default='[25,50,75]', dest='quantileList', 
+                             help='A python expression for a list of quantiles')
+
+
+
+   options,arguments=p.parse_args()
+
+   #--- create the percentile list
+   exec "p = 0.01*array(%s)" % options.quantileList
+
+   #--- get the data from stdin
+   x = loadtxt(sys.stdin)
+   if len(x.shape) > 1:
+      x = x[:,options.column]
+
+   #--- compute the percentiles
+   q = mquantiles(x,p)
+
+   #--- save the results
+   out = column_stack((p,q))
+   savetxt(sys.stdout,out,fmt='%18.15g')
+
